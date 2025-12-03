@@ -11,6 +11,7 @@ use termwiz::color::ColorAttribute;
 use termwiz::escape::csi::{Cursor, Edit, Sgr, CSI};
 use termwiz::escape::parser::Parser;
 use termwiz::escape::{Action, ControlCode};
+use termwiz::input::{KeyCode, KeyCodeEncodeModes, KeyboardEncoding, Modifiers};
 use termwiz::surface::Surface;
 
 /// Configuration for the embedded terminal
@@ -74,6 +75,14 @@ pub struct EmbeddedTerminal {
     current_attrs: CellAttributes,
     /// Saved cursor position (for save/restore)
     saved_cursor: Option<CursorPosition>,
+    /// Whether application cursor keys mode is enabled
+    application_cursor_keys: bool,
+    /// Whether newline mode is enabled
+    newline_mode: bool,
+    /// Keyboard encoding mode
+    keyboard_encoding: KeyboardEncoding,
+    /// Mouse reporting mode
+    mouse_reporting: bool,
 }
 
 impl EmbeddedTerminal {
@@ -93,6 +102,10 @@ impl EmbeddedTerminal {
             follow_mode: true,
             current_attrs: CellAttributes::default(),
             saved_cursor: None,
+            application_cursor_keys: false,
+            newline_mode: false,
+            keyboard_encoding: KeyboardEncoding::Xterm,
+            mouse_reporting: false,
         }
     }
 
@@ -292,6 +305,31 @@ impl EmbeddedTerminal {
         self.surface = Surface::new(self.config.cols, self.config.rows);
     }
 
+    // ========== Input Handling ==========
+
+    /// Encode a key for sending to the PTY
+    pub fn encode_key(&self, key: KeyCode, modifiers: Modifiers) -> String {
+        let modes = KeyCodeEncodeModes {
+            encoding: self.keyboard_encoding,
+            application_cursor_keys: self.application_cursor_keys,
+            newline_mode: self.newline_mode,
+            modify_other_keys: None,
+        };
+
+        // Encode the key (is_down = true for key press)
+        key.encode(modifiers, modes, true).unwrap_or_default()
+    }
+
+    /// Check if mouse reporting is enabled
+    pub fn mouse_enabled(&self) -> bool {
+        self.mouse_reporting
+    }
+
+    /// Check if application cursor keys mode is enabled
+    pub fn application_cursor_keys(&self) -> bool {
+        self.application_cursor_keys
+    }
+
     // ========== Escape Sequence Handling ==========
 
     /// Process raw bytes from PTY
@@ -406,9 +444,7 @@ impl EmbeddedTerminal {
             CSI::Cursor(cursor_op) => self.handle_cursor(cursor_op),
             CSI::Edit(edit_op) => self.handle_edit(edit_op),
             CSI::Sgr(sgr) => self.handle_sgr(sgr),
-            CSI::Mode(_mode) => {
-                // Mode changes (e.g., alternate screen) - handle in future
-            }
+            CSI::Mode(mode) => self.handle_mode(mode),
             CSI::Device(_device) => {
                 // Device queries - ignore for now
             }
@@ -417,6 +453,76 @@ impl EmbeddedTerminal {
             }
             _ => {
                 tracing::debug!("Unhandled CSI: {:?}", csi);
+            }
+        }
+    }
+
+    // ========== Mode Handling ==========
+
+    fn handle_mode(&mut self, mode: termwiz::escape::csi::Mode) {
+        use termwiz::escape::csi::{DecPrivateMode, DecPrivateModeCode, Mode};
+
+        match mode {
+            Mode::SetDecPrivateMode(DecPrivateMode::Code(code)) => {
+                self.set_dec_mode(code, true);
+            }
+            Mode::ResetDecPrivateMode(DecPrivateMode::Code(code)) => {
+                self.set_dec_mode(code, false);
+            }
+            _ => {
+                tracing::debug!("Unhandled mode: {:?}", mode);
+            }
+        }
+    }
+
+    fn set_dec_mode(&mut self, code: termwiz::escape::csi::DecPrivateModeCode, enable: bool) {
+        use termwiz::escape::csi::DecPrivateModeCode;
+
+        match code {
+            DecPrivateModeCode::ApplicationCursorKeys => {
+                self.application_cursor_keys = enable;
+            }
+            DecPrivateModeCode::AutoWrap => {
+                // Auto-wrap mode - we always wrap, ignore
+            }
+            DecPrivateModeCode::ShowCursor => {
+                // Cursor visibility - could track for rendering
+            }
+            DecPrivateModeCode::MouseTracking
+            | DecPrivateModeCode::HighlightMouseTracking
+            | DecPrivateModeCode::ButtonEventMouse
+            | DecPrivateModeCode::AnyEventMouse => {
+                self.mouse_reporting = enable;
+            }
+            DecPrivateModeCode::SGRMouse => {
+                // SGR mouse encoding - we use this by default
+            }
+            DecPrivateModeCode::ClearAndEnableAlternateScreen
+            | DecPrivateModeCode::EnableAlternateScreen => {
+                if enable {
+                    // Save primary screen and switch to alternate
+                    if !self.in_alternate_screen {
+                        self.saved_primary = Some(std::mem::replace(
+                            &mut self.surface,
+                            Surface::new(self.config.cols, self.config.rows),
+                        ));
+                        self.in_alternate_screen = true;
+                    }
+                } else {
+                    // Restore primary screen
+                    if self.in_alternate_screen {
+                        if let Some(primary) = self.saved_primary.take() {
+                            self.surface = primary;
+                        }
+                        self.in_alternate_screen = false;
+                    }
+                }
+            }
+            DecPrivateModeCode::BracketedPaste => {
+                // Bracketed paste mode - could track for input handling
+            }
+            _ => {
+                tracing::debug!("Unhandled DEC mode: {:?} = {}", code, enable);
             }
         }
     }
@@ -881,6 +987,70 @@ impl<'a> ratatui::widgets::Widget for TerminalWidget<'a> {
     }
 }
 
+// ========== Crossterm Key Conversion ==========
+
+/// Convert crossterm key modifiers to termwiz modifiers
+pub fn convert_modifiers(ct_mods: crossterm::event::KeyModifiers) -> Modifiers {
+    use crossterm::event::KeyModifiers;
+
+    let mut mods = Modifiers::NONE;
+
+    if ct_mods.contains(KeyModifiers::SHIFT) {
+        mods |= Modifiers::SHIFT;
+    }
+    if ct_mods.contains(KeyModifiers::CONTROL) {
+        mods |= Modifiers::CTRL;
+    }
+    if ct_mods.contains(KeyModifiers::ALT) {
+        mods |= Modifiers::ALT;
+    }
+
+    mods
+}
+
+/// Convert crossterm key code to termwiz key code
+pub fn convert_keycode(ct_code: crossterm::event::KeyCode) -> KeyCode {
+    use crossterm::event::KeyCode as CtKeyCode;
+
+    match ct_code {
+        CtKeyCode::Char(c) => KeyCode::Char(c),
+        CtKeyCode::Enter => KeyCode::Enter,
+        CtKeyCode::Backspace => KeyCode::Backspace,
+        CtKeyCode::Tab => KeyCode::Tab,
+        CtKeyCode::BackTab => KeyCode::Tab, // Shift+Tab handled via modifiers
+        CtKeyCode::Esc => KeyCode::Escape,
+        CtKeyCode::Up => KeyCode::UpArrow,
+        CtKeyCode::Down => KeyCode::DownArrow,
+        CtKeyCode::Left => KeyCode::LeftArrow,
+        CtKeyCode::Right => KeyCode::RightArrow,
+        CtKeyCode::Home => KeyCode::Home,
+        CtKeyCode::End => KeyCode::End,
+        CtKeyCode::PageUp => KeyCode::PageUp,
+        CtKeyCode::PageDown => KeyCode::PageDown,
+        CtKeyCode::Insert => KeyCode::Insert,
+        CtKeyCode::Delete => KeyCode::Delete,
+        CtKeyCode::F(n) => KeyCode::Function(n),
+        CtKeyCode::Null => KeyCode::Char('\0'),
+        CtKeyCode::CapsLock => KeyCode::CapsLock,
+        CtKeyCode::ScrollLock => KeyCode::ScrollLock,
+        CtKeyCode::NumLock => KeyCode::NumLock,
+        CtKeyCode::PrintScreen => KeyCode::PrintScreen,
+        CtKeyCode::Pause => KeyCode::Pause,
+        CtKeyCode::Menu => KeyCode::Menu,
+        _ => KeyCode::Char(' '), // Fallback for unmapped keys
+    }
+}
+
+/// Convert a crossterm key event to encoded bytes for the PTY
+pub fn encode_crossterm_key(
+    terminal: &EmbeddedTerminal,
+    key: &crossterm::event::KeyEvent,
+) -> String {
+    let modifiers = convert_modifiers(key.modifiers);
+    let keycode = convert_keycode(key.code);
+    terminal.encode_key(keycode, modifiers)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1300,5 +1470,114 @@ mod tests {
         // Cursor position should have REVERSED modifier
         let cursor_cell = buf.cell((2, 0)).unwrap();
         assert!(cursor_cell.modifier.contains(Modifier::REVERSED));
+    }
+
+    // ========== Input Handling Tests ==========
+
+    #[test]
+    fn test_arrow_key_encoding() {
+        let term = EmbeddedTerminal::default_size();
+
+        // Normal mode: arrow keys use CSI sequences
+        let encoded = term.encode_key(KeyCode::UpArrow, Modifiers::NONE);
+        assert_eq!(encoded, "\x1b[A");
+
+        let encoded = term.encode_key(KeyCode::DownArrow, Modifiers::NONE);
+        assert_eq!(encoded, "\x1b[B");
+
+        let encoded = term.encode_key(KeyCode::RightArrow, Modifiers::NONE);
+        assert_eq!(encoded, "\x1b[C");
+
+        let encoded = term.encode_key(KeyCode::LeftArrow, Modifiers::NONE);
+        assert_eq!(encoded, "\x1b[D");
+    }
+
+    #[test]
+    fn test_char_encoding() {
+        let term = EmbeddedTerminal::default_size();
+
+        // Regular characters
+        let encoded = term.encode_key(KeyCode::Char('a'), Modifiers::NONE);
+        assert_eq!(encoded, "a");
+
+        let encoded = term.encode_key(KeyCode::Char('Z'), Modifiers::NONE);
+        assert_eq!(encoded, "Z");
+    }
+
+    #[test]
+    fn test_enter_encoding() {
+        let term = EmbeddedTerminal::default_size();
+
+        let encoded = term.encode_key(KeyCode::Enter, Modifiers::NONE);
+        assert_eq!(encoded, "\r");
+    }
+
+    #[test]
+    fn test_function_key_encoding() {
+        let term = EmbeddedTerminal::default_size();
+
+        // F1-F4 use SS3 sequences
+        let encoded = term.encode_key(KeyCode::Function(1), Modifiers::NONE);
+        assert_eq!(encoded, "\x1bOP");
+
+        let encoded = term.encode_key(KeyCode::Function(2), Modifiers::NONE);
+        assert_eq!(encoded, "\x1bOQ");
+    }
+
+    #[test]
+    fn test_crossterm_key_conversion() {
+        use crossterm::event::{KeyCode as CtKeyCode, KeyModifiers};
+
+        // Test modifier conversion
+        let mods = convert_modifiers(KeyModifiers::CONTROL | KeyModifiers::SHIFT);
+        assert!(mods.contains(Modifiers::CTRL));
+        assert!(mods.contains(Modifiers::SHIFT));
+
+        // Test keycode conversion
+        assert!(matches!(convert_keycode(CtKeyCode::Enter), KeyCode::Enter));
+        assert!(matches!(convert_keycode(CtKeyCode::Up), KeyCode::UpArrow));
+        assert!(matches!(convert_keycode(CtKeyCode::Char('x')), KeyCode::Char('x')));
+    }
+
+    #[test]
+    fn test_application_cursor_mode() {
+        let mut term = EmbeddedTerminal::default_size();
+
+        // Initially in normal mode
+        assert!(!term.application_cursor_keys());
+        let encoded = term.encode_key(KeyCode::UpArrow, Modifiers::NONE);
+        assert_eq!(encoded, "\x1b[A"); // CSI A
+
+        // Enable application cursor keys mode: \x1b[?1h
+        term.write(b"\x1b[?1h");
+        assert!(term.application_cursor_keys());
+
+        // Now arrow keys should use SS3 sequences
+        let encoded = term.encode_key(KeyCode::UpArrow, Modifiers::NONE);
+        assert_eq!(encoded, "\x1bOA"); // SS3 A
+
+        // Disable application cursor keys mode: \x1b[?1l
+        term.write(b"\x1b[?1l");
+        assert!(!term.application_cursor_keys());
+
+        // Back to CSI sequences
+        let encoded = term.encode_key(KeyCode::UpArrow, Modifiers::NONE);
+        assert_eq!(encoded, "\x1b[A");
+    }
+
+    #[test]
+    fn test_mouse_mode() {
+        let mut term = EmbeddedTerminal::default_size();
+
+        // Initially mouse reporting is off
+        assert!(!term.mouse_enabled());
+
+        // Enable mouse tracking: \x1b[?1000h
+        term.write(b"\x1b[?1000h");
+        assert!(term.mouse_enabled());
+
+        // Disable mouse tracking: \x1b[?1000l
+        term.write(b"\x1b[?1000l");
+        assert!(!term.mouse_enabled());
     }
 }
