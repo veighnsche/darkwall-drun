@@ -1,6 +1,25 @@
 //! Niri IPC client for window state management.
 //!
 //! TEAM_000: Phase 3 - Niri IPC Integration
+//!
+//! # Architecture
+//!
+//! This module provides async IPC communication with the niri compositor.
+//! Niri uses a JSON-based protocol over Unix sockets.
+//!
+//! # Connection Lifecycle
+//!
+//! 1. On startup, `NiriClient::try_new()` attempts to find the socket
+//! 2. If found, the client is stored in `App.niri`
+//! 3. Each IPC call opens a new connection (niri doesn't support persistent connections)
+//! 4. If the socket disappears (niri crash), calls will fail gracefully
+//!
+//! # Graceful Degradation
+//!
+//! All niri features are optional. When unavailable:
+//! - Over SSH: Socket doesn't exist, `try_new()` returns None
+//! - Niri crash: `is_available()` returns false, calls return errors
+//! - Non-niri session: Same as SSH case
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
@@ -20,14 +39,29 @@ pub enum NiriResponse {
 }
 
 impl NiriResponse {
-    /// Check if response indicates success
-    /// NOTE: Used in tests; kept for API completeness
-    #[allow(dead_code)]
+    /// Check if response indicates success.
+    ///
+    /// # Usage
+    ///
+    /// Use this for simple success/failure checks without inspecting the payload:
+    ///
+    /// ```ignore
+    /// let response = client.request(msg).await?;
+    /// if !response.is_ok() {
+    ///     // Handle error
+    /// }
+    /// ```
+    ///
+    /// For responses with data (like `focused_window`), pattern match instead
+    /// to access the `ok` field's contents.
+    #[allow(dead_code)] // Phase 9: Will be used for health checks
     pub fn is_ok(&self) -> bool {
         matches!(self, NiriResponse::Ok { .. })
     }
 
-    /// Get error message if response is an error
+    /// Get error message if response is an error.
+    ///
+    /// Returns `None` for successful responses.
     pub fn error(&self) -> Option<&str> {
         match self {
             NiriResponse::Err { err } => Some(err),
@@ -68,9 +102,31 @@ impl NiriClient {
         }
     }
 
-    /// Check if niri IPC is available
-    /// NOTE: Reserved for future health-check UI indicator
-    #[allow(dead_code)]
+    /// Check if niri IPC is currently available.
+    ///
+    /// # Behavior
+    ///
+    /// Returns `true` if the socket file exists. This is a quick filesystem check,
+    /// not a full connection test.
+    ///
+    /// # Use Cases
+    ///
+    /// 1. **Health indicator in UI**: Show green/red dot in status bar
+    /// 2. **Feature gating**: Skip niri-specific UI elements when unavailable
+    /// 3. **Reconnection logic**: Periodically check if niri has restarted
+    ///
+    /// # Limitations
+    ///
+    /// - Socket existing doesn't guarantee niri is responsive
+    /// - For full health check, use `ping()` (not yet implemented)
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // In status bar rendering
+    /// let indicator = if client.is_available() { "◉" } else { "◎" };
+    /// ```
+    #[allow(dead_code)] // Phase 9: Will be used for health indicator
     pub fn is_available(&self) -> bool {
         self.socket_path.exists()
     }
@@ -143,9 +199,46 @@ impl NiriClient {
         Ok(())
     }
 
-    /// Get information about the focused window
-    /// NOTE: Reserved for future window-aware features (e.g., showing current app info)
-    #[allow(dead_code)]
+    /// Get information about the currently focused window.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Some(WindowInfo))` - Window is focused, info retrieved
+    /// - `Ok(None)` - No window is focused (e.g., empty workspace)
+    /// - `Err(_)` - IPC error (socket gone, parse error, etc.)
+    ///
+    /// # Use Cases
+    ///
+    /// 1. **Smart float/unfloat**: Remember original state before execution
+    ///    ```ignore
+    ///    let was_floating = client.focused_window().await?
+    ///        .map(|w| w.is_floating)
+    ///        .unwrap_or(false);
+    ///    // ... execute command ...
+    ///    if was_floating {
+    ///        client.set_floating(true).await?;
+    ///    }
+    ///    ```
+    ///
+    /// 2. **Debug display**: Show current window info in status bar
+    ///    ```ignore
+    ///    if let Some(info) = client.focused_window().await? {
+    ///        println!("Window: {} ({})", info.title, info.app_id);
+    ///    }
+    ///    ```
+    ///
+    /// 3. **Context-aware behavior**: Different actions based on current app
+    ///    ```ignore
+    ///    if info.app_id == "firefox" {
+    ///        // Special handling for browser
+    ///    }
+    ///    ```
+    ///
+    /// # Performance
+    ///
+    /// Each call opens a new socket connection. For frequent polling,
+    /// consider caching with a refresh interval (e.g., 1 second).
+    #[allow(dead_code)] // Phase 9: Will be used for smart float/unfloat
     pub async fn focused_window(&self) -> Result<Option<WindowInfo>> {
         let msg = r#"{"Request":"FocusedWindow"}"#;
         let response = self.request(msg).await?;
@@ -155,7 +248,6 @@ impl NiriClient {
                 if ok.is_null() {
                     return Ok(None);
                 }
-                // Parse window info from the response
                 let info: WindowInfo = serde_json::from_value(ok)
                     .context("Failed to parse window info")?;
                 Ok(Some(info))
@@ -166,9 +258,36 @@ impl NiriClient {
         }
     }
 
-    /// Toggle floating state of current window
-    /// NOTE: Reserved for keybind to toggle float state
-    #[allow(dead_code)]
+    /// Toggle floating state of the focused window.
+    ///
+    /// # Behavior
+    ///
+    /// - If window is tiled → becomes floating
+    /// - If window is floating → becomes tiled
+    /// - If no window focused → returns error from niri
+    ///
+    /// # Use Cases
+    ///
+    /// 1. **User keybind**: Ctrl+F to toggle float from within drun
+    ///    ```ignore
+    ///    // In key handler
+    ///    KeyCode::Char('f') if ctrl => {
+    ///        if let Some(ref niri) = app.niri {
+    ///            niri.toggle_floating().await.ok();
+    ///        }
+    ///    }
+    ///    ```
+    ///
+    /// 2. **Quick resize workflow**: Float → resize with mouse → unfloat
+    ///
+    /// # Difference from `set_floating()`
+    ///
+    /// - `toggle_floating()`: Inverts current state (don't need to know current state)
+    /// - `set_floating(bool)`: Sets explicit state (idempotent, predictable)
+    ///
+    /// Use `toggle_floating()` for user-triggered actions.
+    /// Use `set_floating()` for programmatic state management.
+    #[allow(dead_code)] // Phase 9: Will be used for Ctrl+F keybind
     pub async fn toggle_floating(&self) -> Result<()> {
         let msg = r#"{"Action":{"ToggleWindowFloating":{"id":null}}}"#;
         let response = self.request(msg).await?;
@@ -181,16 +300,50 @@ impl NiriClient {
     }
 }
 
-/// Information about a niri window
-/// NOTE: Reserved for future window-aware features
+/// Information about a niri window.
+///
+/// # Fields
+///
+/// - `id`: Unique window identifier (stable for window lifetime)
+/// - `app_id`: Wayland app_id (e.g., "firefox", "org.gnome.Nautilus")
+/// - `title`: Current window title (may change dynamically)
+/// - `is_floating`: Whether window is in floating state
+///
+/// # Use Cases
+///
+/// ```ignore
+/// let info = client.focused_window().await?.unwrap();
+///
+/// // Check if this is our own window
+/// if info.app_id == "darkwall-drun" {
+///     // We're focused, good
+/// }
+///
+/// // Remember float state for later restoration
+/// let was_floating = info.is_floating;
+///
+/// // Log for debugging
+/// tracing::debug!("Focused: {} ({})", info.title, info.app_id);
+/// ```
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
+#[allow(dead_code)] // Phase 9: Will be used with focused_window()
 pub struct WindowInfo {
+    /// Unique window identifier assigned by niri.
+    /// Stable for the lifetime of the window.
     pub id: u64,
+    
+    /// Wayland app_id (similar to X11 WM_CLASS).
+    /// Set by the application, e.g., "firefox", "kitty".
     #[serde(default)]
     pub app_id: String,
+    
+    /// Current window title.
+    /// May change dynamically (e.g., browser tab changes).
     #[serde(default)]
     pub title: String,
+    
+    /// Whether the window is currently floating.
+    /// `false` means tiled in the layout.
     #[serde(default)]
     pub is_floating: bool,
 }

@@ -1,4 +1,3 @@
-mod action;
 mod app;
 mod config;
 mod desktop_entry;
