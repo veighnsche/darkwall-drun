@@ -1,18 +1,8 @@
 //! Usage history and frecency-based sorting.
 //!
 //! TEAM_000: Phase 5, Unit 5.1 - Frecency Sorting
-//!
-//! # STATUS: Not yet wired up
-//!
-//! This module is complete but not integrated into the main app.
-//! To wire up:
-//! 1. Add `history: History` field to `App` struct
-//! 2. Call `history.load()` on startup
-//! 3. Call `history.record_usage(&entry.id)` after successful execution
-//! 4. Use `history.frecency_score()` to sort entries in `update_filtered()`
-//! 5. Call `history.save()` on exit
+//! TEAM_001: Wired up to App
 
-#![allow(dead_code)] // Module not yet integrated
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -76,11 +66,20 @@ impl History {
     }
 
     /// Get the default history file path
+    /// TEAM_001: Use XDG_STATE_HOME per spec (not DATA_HOME)
     fn default_path() -> PathBuf {
-        dirs::data_dir()
+        // XDG_STATE_HOME is for state data that persists between restarts
+        // but isn't important enough to sync (like history, logs, etc.)
+        if let Ok(state_home) = std::env::var("XDG_STATE_HOME") {
+            return PathBuf::from(state_home)
+                .join("darkwall-drun")
+                .join("history.json");
+        }
+
+        // Fall back to ~/.local/state (XDG default)
+        dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("darkwall-drun")
-            .join("history.json")
+            .join(".local/state/darkwall-drun/history.json")
     }
 
     /// Load history from disk

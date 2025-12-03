@@ -23,7 +23,16 @@ This phase adds polish and quality-of-life features: frecency-based sorting, cat
 | 5.1 | Frecency Sorting | Medium | ⚠️ Code exists, not wired | [unit-5.1-frecency-sorting.md](./unit-5.1-frecency-sorting.md) |
 | 5.2 | Categories/Groups | Medium | 🟡 Not started | [unit-5.2-categories.md](./unit-5.2-categories.md) |
 | 5.3 | Icons (Optional) | Low | 🟡 Field exists, not used | [unit-5.3-icons.md](./unit-5.3-icons.md) |
-| 5.4 | Theming | Low | 🟡 Not started | [unit-5.4-theming.md](./unit-5.4-theming.md) |
+| 5.4 | Theming | Medium | 🟡 Not started | [unit-5.4-theming.md](./unit-5.4-theming.md) |
+
+### Unit 5.4 Sub-Units (Theming)
+
+| Unit | Name | Complexity | File |
+|------|------|------------|------|
+| 5.4.1 | Grid Layout | Low | [unit-5.4.1-grid-layout.md](./unit-5.4.1-grid-layout.md) |
+| 5.4.2 | Entry Cards | Medium | [unit-5.4.2-entry-cards.md](./unit-5.4.2-entry-cards.md) |
+| 5.4.3 | Color System | Low | [unit-5.4.3-color-system.md](./unit-5.4.3-color-system.md) |
+| 5.4.4 | Configuration | Low | [unit-5.4.4-configuration.md](./unit-5.4.4-configuration.md) |
 
 ---
 

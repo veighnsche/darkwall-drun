@@ -3,24 +3,20 @@
 > **Phase:** 5 - Polish & Features  
 > **Complexity:** Medium  
 > **Skills:** Algorithms, persistence  
-> **Status:** ⚠️ Implemented but not wired up
+> **Status:** ✅ Complete (TEAM_001)
 
 ---
 
 ## Implementation Status
 
-The `history.rs` module is **complete** with:
-- `UsageStats` - per-entry usage count and last-used timestamp
-- `HistoryFile` - JSON serialization format with version field  
-- `History` - main manager with load/save/record/frecency methods
+The frecency system is **fully integrated**:
 
-**Remaining work:**
-1. Update `default_path()` to use `XDG_STATE_HOME` (currently uses DATA_HOME)
-2. Add `History` field to `App` struct
-3. Call `history.load()` on startup
-4. Call `history.record_usage(&entry.id)` after successful execution
-5. Integrate frecency into `update_filtered()` sorting
-6. Call `history.save()` on exit
+- `history.rs` - Core module with `UsageStats`, `HistoryFile`, `History`
+- `config.rs` - `HistoryConfig` with `enabled`, `max_entries`, `decay_after_days`, `frecency_weight`
+- `app.rs` - History loaded on startup, usage recorded on execution, frecency integrated into sorting
+- `main.rs` - History saved on exit
+
+**History file location:** `$XDG_STATE_HOME/darkwall-drun/history.json` (default: `~/.local/state/darkwall-drun/history.json`)
 
 ---
 

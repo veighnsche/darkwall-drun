@@ -169,6 +169,106 @@ This config does **NOT** define actions. Actions come only from `.desktop` files
 
 ---
 
+## Theming Requirements
+
+### Layout
+
+DRUN displays entries in a **grid layout**:
+
+| Property | Value | Notes |
+|----------|-------|-------|
+| Columns | 2 | Side-by-side entries |
+| Visible Rows | 5 | Shows 10 entries total (2×5) |
+| Entry Style | Card | Each entry is a distinct visual block |
+
+### Entry Display
+
+Each entry shows **4 lines of information** (multi-line card):
+
+```
+┌─────────────────────────────────┐
+│ [Icon]  Name (bold)             │
+│         Generic Name            │
+│         Comment (dimmed)        │
+│         Categories (smaller)    │
+└─────────────────────────────────┘
+```
+
+| Line | Field | Style |
+|------|-------|-------|
+| 1 | `Name` | Bold, primary foreground |
+| 2 | `GenericName` | Normal, primary foreground |
+| 3 | `Comment` | Dimmed (gray) |
+| 4 | `Categories` | Smaller, dimmed |
+
+### Icon Requirements
+
+| Property | Value |
+|----------|-------|
+| Size | Large (equivalent to ~48px in GUI) |
+| Position | Left of text block |
+| Fallback | Text placeholder or none |
+
+### Color Scheme
+
+Default dark theme (user-configurable):
+
+| Element | Default | Notes |
+|---------|---------|-------|
+| Background | Dark (`#0d1116`) | Main window background |
+| Foreground | Light (`#e5eaf1`) | Primary text |
+| Selection BG | Slightly lighter (`#141c2a`) | Selected entry background |
+| Selection FG | Same as foreground | Selected entry text |
+| Accent/Border | Amber (`#b45309`) | Input border, highlights |
+| Dimmed Text | Gray (`#9ca3af`, `#6b7280`) | Comments, categories |
+
+### Card Styling
+
+Each entry is rendered as a **card** with:
+
+| Property | Value |
+|----------|-------|
+| Padding | Generous (12px vertical, 8px horizontal equivalent) |
+| Background | Distinct from window background |
+| Selection | Background color change on selection |
+| Spacing | Gap between cards |
+
+### TUI Constraints
+
+Since DRUN is a TUI, theming must work within terminal limitations:
+
+| Constraint | Handling |
+|------------|----------|
+| No pixel sizes | Use character cells for sizing |
+| Limited colors | Support 256-color and true-color terminals |
+| No fonts | Use terminal's font; rely on Unicode for styling |
+| No images | Icons via Nerd Font glyphs or Kitty graphics protocol (optional) |
+
+### Configuration
+
+```toml
+[appearance]
+columns = 2
+visible_rows = 5
+
+[appearance.entry]
+show_generic = true
+show_comment = true
+show_categories = true
+
+[theme]
+preset = "dark"  # dark, light, nord, gruvbox, dracula
+
+[theme.colors]
+background = "#0d1116"
+foreground = "#e5eaf1"
+selection_bg = "#141c2a"
+accent = "#b45309"
+dimmed = "#9ca3af"
+```
+
+---
+
 ## Summary
 
 | Aspect | Requirement |

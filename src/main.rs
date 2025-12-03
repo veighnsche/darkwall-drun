@@ -86,6 +86,9 @@ async fn main() -> Result<()> {
     // Run main loop
     let result = run_app(&mut terminal, &mut app).await;
 
+    // TEAM_001: Save history before exit
+    app.save_history();
+
     // Restore terminal
     disable_raw_mode()?;
     if cli.mouse {

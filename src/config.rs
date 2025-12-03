@@ -9,6 +9,7 @@ pub struct Config {
     pub appearance: AppearanceConfig,
     pub niri: NiriConfig,
     pub behavior: BehaviorConfig,
+    pub history: HistoryConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +42,31 @@ pub struct BehaviorConfig {
     pub show_generic_name: bool,
 }
 
+/// TEAM_001: History/frecency configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HistoryConfig {
+    /// Enable frecency sorting
+    pub enabled: bool,
+    /// Maximum entries to track
+    pub max_entries: usize,
+    /// Decay old entries after N days
+    pub decay_after_days: u64,
+    /// Weight of frecency vs fuzzy match (0.0 - 1.0)
+    pub frecency_weight: f64,
+}
+
+impl Default for HistoryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_entries: 1000,
+            decay_after_days: 90,
+            frecency_weight: 0.3,
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
@@ -53,6 +79,7 @@ impl Default for Config {
             appearance: AppearanceConfig::default(),
             niri: NiriConfig::default(),
             behavior: BehaviorConfig::default(),
+            history: HistoryConfig::default(),
         }
     }
 }

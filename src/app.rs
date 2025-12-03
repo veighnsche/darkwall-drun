@@ -7,6 +7,7 @@ use nucleo_matcher::{
 use crate::config::Config;
 use crate::desktop_entry::Entry;
 use crate::executor::{CommandStatus, OutputBuffer, TerminalMode};
+use crate::history::History;
 use crate::niri::NiriClient;
 use crate::pty::PtySession;
 
@@ -59,6 +60,10 @@ pub struct App {
     output_buffer: OutputBuffer,
     /// Fuzzy matcher
     matcher: Matcher,
+    /// TEAM_001: Usage history for frecency sorting
+    history: History,
+    /// TEAM_001: Frecency weight from config
+    frecency_weight: f64,
 }
 
 impl App {
@@ -74,6 +79,18 @@ impl App {
 
         let max_output_lines = config.behavior.preserve_output_lines.max(1000);
         
+        // TEAM_001: Initialize history
+        let mut history = History::new(
+            config.history.max_entries,
+            config.history.decay_after_days,
+        );
+        if config.history.enabled {
+            if let Err(e) = history.load() {
+                tracing::warn!("Failed to load history: {}", e);
+            }
+        }
+        let frecency_weight = config.history.frecency_weight;
+        
         Self {
             mode: AppMode::Launcher,
             entries,
@@ -86,6 +103,8 @@ impl App {
             pty_session: None,
             output_buffer: OutputBuffer::new(max_output_lines),
             matcher: Matcher::new(nucleo_matcher::Config::DEFAULT),
+            history,
+            frecency_weight,
         }
     }
 
@@ -156,13 +175,34 @@ impl App {
     }
 
     /// Update filtered list based on current filter
+    /// TEAM_001: Integrated frecency scoring
     fn update_filtered(&mut self) {
         if self.filter.is_empty() {
-            self.filtered = (0..self.entries.len()).collect();
+            // No filter: sort by frecency only
+            let mut scored: Vec<(usize, f64)> = self
+                .entries
+                .iter()
+                .enumerate()
+                .map(|(i, entry)| {
+                    let frecency = self.history.frecency_score(&entry.id);
+                    (i, frecency)
+                })
+                .collect();
+
+            // Sort by frecency descending, then alphabetically for ties
+            scored.sort_by(|a, b| {
+                b.1.partial_cmp(&a.1)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| {
+                        self.entries[a.0].name.cmp(&self.entries[b.0].name)
+                    })
+            });
+            self.filtered = scored.into_iter().map(|(i, _)| i).collect();
         } else {
             let pattern = Pattern::parse(&self.filter, CaseMatching::Ignore, Normalization::Smart);
 
-            let mut scored: Vec<(usize, u32)> = self
+            // Combine fuzzy score with frecency
+            let mut scored: Vec<(usize, f64)> = self
                 .entries
                 .iter()
                 .enumerate()
@@ -171,12 +211,20 @@ impl App {
                     let mut buf = Vec::new();
                     pattern
                         .score(nucleo_matcher::Utf32Str::new(&haystack, &mut buf), &mut self.matcher)
-                        .map(|score| (i, score))
+                        .map(|fuzzy_score| {
+                            let frecency = self.history.frecency_score(&entry.id);
+                            // Weighted combination: fuzzy_score normalized + frecency weight
+                            // Fuzzy scores are typically 0-1000+, frecency is 0-~500
+                            let fuzzy_norm = fuzzy_score as f64;
+                            let combined = fuzzy_norm * (1.0 - self.frecency_weight)
+                                + frecency * self.frecency_weight * 10.0; // Scale frecency
+                            (i, combined)
+                        })
                 })
                 .collect();
 
-            // Sort by score descending
-            scored.sort_by(|a, b| b.1.cmp(&a.1));
+            // Sort by combined score descending
+            scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             self.filtered = scored.into_iter().map(|(i, _)| i).collect();
         }
 
@@ -222,6 +270,7 @@ impl App {
 
     /// Start executing the selected entry
     /// TEAM_000: Phase 2 - In-place execution with PTY
+    /// TEAM_001: Records usage for frecency
     pub async fn execute_entry(&mut self, entry: Entry, cols: u16, rows: u16) -> Result<()> {
         let Some(cmd) = entry.command() else {
             tracing::warn!("Entry {} has no command", entry.id);
@@ -229,6 +278,13 @@ impl App {
         };
 
         tracing::info!("Executing: {}", cmd);
+
+        // TEAM_001: Record usage for frecency sorting
+        if self.config.history.enabled {
+            self.history.record_usage(&entry.id);
+            // Re-sort entries so next time this entry appears higher
+            self.update_filtered();
+        }
 
         // Detect terminal mode
         let terminal_mode = TerminalMode::detect(&cmd, Some(&entry));
@@ -391,5 +447,14 @@ impl App {
     /// Get config reference
     pub fn config(&self) -> &Config {
         &self.config
+    }
+
+    /// TEAM_001: Save history to disk
+    pub fn save_history(&self) {
+        if self.config.history.enabled {
+            if let Err(e) = self.history.save() {
+                tracing::warn!("Failed to save history: {}", e);
+            }
+        }
     }
 }
