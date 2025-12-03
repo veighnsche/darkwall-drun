@@ -12,11 +12,15 @@ pub struct Entry {
     pub generic_name: Option<String>,
     pub comment: Option<String>,
     pub exec: Option<String>,
+    /// NOTE: Stored for future icon display support in TUI
+    #[allow(dead_code)]
     pub icon: Option<String>,
     pub categories: Vec<String>,
     pub keywords: Vec<String>,
     pub terminal: bool,
     pub no_display: bool,
+    /// NOTE: Stored for debugging and potential "open containing folder" feature
+    #[allow(dead_code)]
     pub path: PathBuf,
     /// Custom X-Darkwall* fields from the desktop entry
     pub custom_fields: HashMap<String, String>,
@@ -126,6 +130,8 @@ impl Entry {
     }
 
     /// Check if a custom X-Darkwall boolean field is true
+    /// NOTE: Reserved for future use (e.g., X-DarkwallKeepOutput, X-DarkwallUnfloatOnRun)
+    #[allow(dead_code)]
     pub fn get_darkwall_bool(&self, name: &str) -> Option<bool> {
         self.get_darkwall_field(name).map(|v| {
             matches!(v.to_lowercase().as_str(), "true" | "yes" | "1")
@@ -133,6 +139,8 @@ impl Entry {
     }
 
     /// Get a custom X-Darkwall integer field
+    /// NOTE: Reserved for future use (e.g., X-DarkwallPreserveLines)
+    #[allow(dead_code)]
     pub fn get_darkwall_int(&self, name: &str) -> Option<usize> {
         self.get_darkwall_field(name).and_then(|v| v.parse().ok())
     }

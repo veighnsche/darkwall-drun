@@ -109,6 +109,8 @@ impl PtySession {
     }
 
     /// Wait for the child process to exit and return the exit status
+    /// NOTE: Used in tests; main code uses try_wait() for non-blocking behavior
+    #[allow(dead_code)]
     pub fn wait(&mut self) -> Result<ExitStatus> {
         self.child.wait().context("Failed to wait for child process")
     }
@@ -121,6 +123,8 @@ impl PtySession {
     }
 
     /// Get a clone of the reader for async operations
+    /// NOTE: Reserved for future async PTY reading implementation
+    #[allow(dead_code)]
     pub fn take_reader(&mut self) -> Box<dyn Read + Send> {
         std::mem::replace(
             &mut self.reader,

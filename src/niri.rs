@@ -12,12 +12,17 @@ use tokio::net::UnixStream;
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum NiriResponse {
-    Ok { ok: serde_json::Value },
+    Ok {
+        #[allow(dead_code)] // Used for parsing, value accessed via pattern matching
+        ok: serde_json::Value,
+    },
     Err { err: String },
 }
 
 impl NiriResponse {
     /// Check if response indicates success
+    /// NOTE: Used in tests; kept for API completeness
+    #[allow(dead_code)]
     pub fn is_ok(&self) -> bool {
         matches!(self, NiriResponse::Ok { .. })
     }
@@ -64,6 +69,8 @@ impl NiriClient {
     }
 
     /// Check if niri IPC is available
+    /// NOTE: Reserved for future health-check UI indicator
+    #[allow(dead_code)]
     pub fn is_available(&self) -> bool {
         self.socket_path.exists()
     }
@@ -137,6 +144,8 @@ impl NiriClient {
     }
 
     /// Get information about the focused window
+    /// NOTE: Reserved for future window-aware features (e.g., showing current app info)
+    #[allow(dead_code)]
     pub async fn focused_window(&self) -> Result<Option<WindowInfo>> {
         let msg = r#"{"Request":"FocusedWindow"}"#;
         let response = self.request(msg).await?;
@@ -158,6 +167,8 @@ impl NiriClient {
     }
 
     /// Toggle floating state of current window
+    /// NOTE: Reserved for keybind to toggle float state
+    #[allow(dead_code)]
     pub async fn toggle_floating(&self) -> Result<()> {
         let msg = r#"{"Action":{"ToggleWindowFloating":{"id":null}}}"#;
         let response = self.request(msg).await?;
@@ -171,7 +182,9 @@ impl NiriClient {
 }
 
 /// Information about a niri window
+/// NOTE: Reserved for future window-aware features
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct WindowInfo {
     pub id: u64,
     #[serde(default)]

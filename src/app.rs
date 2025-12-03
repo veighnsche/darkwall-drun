@@ -19,6 +19,8 @@ pub enum AppMode {
     /// Executing a command with PTY - showing output
     Executing {
         command: String,
+        /// NOTE: Reserved for mode-specific UI behavior (e.g., different status indicators)
+        #[allow(dead_code)]
         mode: TerminalMode,
     },
     /// Command finished, showing preserved output above launcher
@@ -190,6 +192,8 @@ impl App {
     }
 
     /// Check if we're in launcher mode
+    /// NOTE: Currently unused but kept for API completeness - may be useful for plugins/extensions
+    #[allow(dead_code)]
     pub fn is_launcher_mode(&self) -> bool {
         matches!(self.mode, AppMode::Launcher)
     }
@@ -200,6 +204,8 @@ impl App {
     }
 
     /// Check if we're in post-execution mode
+    /// NOTE: Currently unused but kept for API completeness - may be useful for plugins/extensions
+    #[allow(dead_code)]
     pub fn is_post_execution(&self) -> bool {
         matches!(self.mode, AppMode::PostExecution { .. })
     }

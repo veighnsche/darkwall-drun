@@ -172,6 +172,8 @@ impl OutputBuffer {
     }
 
     /// Get all lines
+    /// NOTE: Used in tests; kept for API completeness
+    #[allow(dead_code)]
     pub fn lines(&self) -> impl Iterator<Item = &str> {
         self.lines.iter().map(|l| l.content.as_str())
     }
@@ -182,11 +184,13 @@ impl OutputBuffer {
     }
 
     /// Check if buffer is empty
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.lines.is_empty()
     }
 
     /// Get current scroll offset
+    #[allow(dead_code)]
     pub fn scroll_offset(&self) -> usize {
         self.scroll_offset
     }
@@ -271,6 +275,7 @@ fn strip_ansi_escapes(s: &str) -> String {
 
 /// Status of a command execution
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Variants used in pattern matching in ui.rs
 pub enum CommandStatus {
     /// Command is still running
     Running,
@@ -295,6 +300,8 @@ impl CommandStatus {
     }
     
     /// Create from std::process::ExitStatus (for TUI handover)
+    /// NOTE: Reserved for future TUI exit status reporting
+    #[allow(dead_code)]
     pub fn from_std_exit_status(status: std::process::ExitStatus) -> Self {
         if let Some(code) = status.code() {
             CommandStatus::Exited(code)
@@ -311,6 +318,8 @@ impl CommandStatus {
     }
 
     /// Check if this represents a successful exit
+    /// NOTE: Reserved for future use in exit status display
+    #[allow(dead_code)]
     pub fn is_success(&self) -> bool {
         matches!(self, CommandStatus::Exited(0))
     }
