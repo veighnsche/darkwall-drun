@@ -2,7 +2,15 @@
 
 > **Phase:** 5 - Polish & Features  
 > **Complexity:** Low  
-> **Skills:** Image handling, terminal capabilities
+> **Skills:** Image handling, terminal capabilities  
+> **Status:** 🟡 Not started - `Entry.icon` field exists but unused
+
+---
+
+## Current State
+
+The `Entry.icon` field is populated from `.desktop` files but not displayed.
+The field is marked `#[allow(dead_code)]` with a note about future icon display.
 
 ---
 
@@ -196,6 +204,47 @@ fn test_icon_fallback() {
 - **Theme issues:** Icon themes vary; may need fallback chain
 - **Terminal support:** Most terminals don't support images
 - **Feature flag:** Make this optional to reduce binary size
+
+---
+
+## SSH Considerations
+
+Icons should be disabled or use Nerd Font fallback over SSH:
+- Graphics protocols may not work
+- Image files may not exist on remote host
+- Bandwidth considerations
+
+```rust
+fn should_show_icons() -> bool {
+    // Disable if SSH_CONNECTION is set (unless explicitly enabled)
+    if std::env::var("SSH_CONNECTION").is_ok() {
+        return config.appearance.force_icons_over_ssh;
+    }
+    config.appearance.show_icons
+}
+```
+
+---
+
+## Nerd Font Alternative
+
+For terminals without graphics support, use Nerd Font icons:
+
+```rust
+fn icon_to_nerd_font(categories: &[String]) -> &'static str {
+    match categories.first().map(|s| s.as_str()) {
+        Some("Development") => "\u{f121}",  // 
+        Some("Network") => "\u{f0ac}",      // 
+        Some("Utility") => "\u{f0ad}",      // 
+        Some("System") => "\u{f085}",       // 
+        Some("Audio") => "\u{f001}",        // 
+        Some("Video") => "\u{f03d}",        // 
+        Some("Graphics") => "\u{f1fc}",     // 
+        Some("Game") => "\u{f11b}",         // 
+        _ => "\u{f15b}",                    //  (default file)
+    }
+}
+```
 
 ---
 

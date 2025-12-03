@@ -2,7 +2,25 @@
 
 > **Phase:** 5 - Polish & Features  
 > **Complexity:** Medium  
-> **Skills:** Algorithms, persistence
+> **Skills:** Algorithms, persistence  
+> **Status:** ⚠️ Implemented but not wired up
+
+---
+
+## Implementation Status
+
+The `history.rs` module is **complete** with:
+- `UsageStats` - per-entry usage count and last-used timestamp
+- `HistoryFile` - JSON serialization format with version field  
+- `History` - main manager with load/save/record/frecency methods
+
+**Remaining work:**
+1. Update `default_path()` to use `XDG_STATE_HOME` (currently uses DATA_HOME)
+2. Add `History` field to `App` struct
+3. Call `history.load()` on startup
+4. Call `history.record_usage(&entry.id)` after successful execution
+5. Integrate frecency into `update_filtered()` sorting
+6. Call `history.save()` on exit
 
 ---
 
@@ -61,10 +79,30 @@ impl History {
 }
 ```
 
-### 4. Persist to History File
+### 4. Persist to History File (XDG Compliant)
+
+Per the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/latest/):
+
+> `$XDG_STATE_HOME` contains state data that should persist between (application) restarts,
+> but that is not important or portable enough to the user that it should be stored in `$XDG_DATA_HOME`.
+> It may contain: **actions history** (logs, history, recently used files, …)
+
+**History file location:** `$XDG_STATE_HOME/darkwall-drun/history.json`
+
+Default: `~/.local/state/darkwall-drun/history.json`
 
 ```rust
-const HISTORY_PATH: &str = "~/.local/share/darkwall-drun/history.json";
+fn default_history_path() -> PathBuf {
+    // Use XDG_STATE_HOME per spec (NOT DATA_HOME)
+    if let Ok(state_home) = std::env::var("XDG_STATE_HOME") {
+        return PathBuf::from(state_home).join("darkwall-drun/history.json");
+    }
+    
+    // Fall back to ~/.local/state
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".local/state/darkwall-drun/history.json")
+}
 
 impl History {
     pub fn load() -> Result<Self>;
@@ -72,6 +110,11 @@ impl History {
     pub fn record_usage(&mut self, entry_id: &str);
 }
 ```
+
+**Why STATE_HOME, not DATA_HOME?**
+- History is machine-specific (different apps on different machines)
+- Not important enough to sync across machines
+- Losing it is not catastrophic (just resets frecency)
 
 ---
 

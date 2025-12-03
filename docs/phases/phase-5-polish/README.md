@@ -1,6 +1,6 @@
 # Phase 5: Polish & Features
 
-> **Status:** 🔲 Not Started
+> **Status:** ⚠️ Partially Implemented
 
 ---
 
@@ -18,12 +18,12 @@ This phase adds polish and quality-of-life features: frecency-based sorting, cat
 
 ## Work Units
 
-| Unit | Name | Complexity | File |
-|------|------|------------|------|
-| 5.1 | Frecency Sorting | Medium | [unit-5.1-frecency-sorting.md](./unit-5.1-frecency-sorting.md) |
-| 5.2 | Categories/Groups | Medium | [unit-5.2-categories.md](./unit-5.2-categories.md) |
-| 5.3 | Icons (Optional) | Low | [unit-5.3-icons.md](./unit-5.3-icons.md) |
-| 5.4 | Theming | Low | [unit-5.4-theming.md](./unit-5.4-theming.md) |
+| Unit | Name | Complexity | Status | File |
+|------|------|------------|--------|------|
+| 5.1 | Frecency Sorting | Medium | ⚠️ Code exists, not wired | [unit-5.1-frecency-sorting.md](./unit-5.1-frecency-sorting.md) |
+| 5.2 | Categories/Groups | Medium | 🟡 Not started | [unit-5.2-categories.md](./unit-5.2-categories.md) |
+| 5.3 | Icons (Optional) | Low | 🟡 Field exists, not used | [unit-5.3-icons.md](./unit-5.3-icons.md) |
+| 5.4 | Theming | Low | 🟡 Not started | [unit-5.4-theming.md](./unit-5.4-theming.md) |
 
 ---
 
