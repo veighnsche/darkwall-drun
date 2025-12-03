@@ -1,5 +1,5 @@
-# darkwall-tui configuration
-# Copy to ~/.config/darkwall-tui/config.toml
+# darkwall-drun configuration
+# Copy to ~/.config/darkwall-drun/config.toml
 
 # Directories to search for .desktop files
 desktop_entry_dirs = [

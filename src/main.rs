@@ -19,12 +19,12 @@ use app::App;
 use config::Config;
 
 #[derive(Parser, Debug)]
-#[command(name = "darkwall-tui")]
+#[command(name = "darkwall-drun")]
 #[command(about = "TUI application launcher with niri integration")]
 #[command(version)]
 struct Cli {
     /// Config file path
-    #[arg(long, default_value = "~/.config/darkwall-tui/config.toml")]
+    #[arg(long, default_value = "~/.config/darkwall-drun/config.toml")]
     config: String,
 
     /// Run in daemon mode (stay open after command execution)
@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "darkwall_tui=info".into()),
+                .unwrap_or_else(|_| "darkwall_drun=info".into()),
         )
         .with(tracing_subscriber::fmt::layer().with_writer(io::stderr))
         .init();

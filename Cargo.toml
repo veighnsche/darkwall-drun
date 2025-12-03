@@ -1,11 +1,11 @@
 [package]
-name = "darkwall-tui"
+name = "darkwall-drun"
 version = "0.1.0"
 edition = "2021"
 description = "TUI application launcher with niri integration"
 authors = ["Vince"]
 license = "MIT"
-repository = "https://github.com/vince/darkwall-tui"
+repository = "https://github.com/vince/darkwall-drun"
 
 [dependencies]
 # TUI

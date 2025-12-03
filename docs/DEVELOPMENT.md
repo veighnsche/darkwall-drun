@@ -1,6 +1,15 @@
-# darkwall-tui Development Masterplan
+# darkwall-drun Development Masterplan
 
 > **Status:** Phase 1 scaffolding complete. Ready for team development.
+
+---
+
+## Quick Links
+
+- [Getting Started](./GETTING_STARTED.md) - New developer guide
+- [Architecture](./ARCHITECTURE.md) - System design
+- [Testing](./TESTING.md) - Test strategy
+- [Dependencies](./DEPENDENCIES.md) - Crate information
 
 ---
 
@@ -11,6 +20,57 @@ Replace rofi with a TUI-based launcher that:
 2. Executes commands in-place (no new windows)
 3. Seamlessly transitions between launcher and execution modes via niri IPC
 4. Returns to launcher after command completion (preserving output)
+
+---
+
+## Development Phases
+
+| Phase | Name | Status | Docs |
+|-------|------|--------|------|
+| 1 | Basic drun/TUI Launcher | ✅ Complete | [phase-1-basic-launcher.md](./phases/phase-1-basic-launcher.md) |
+| 2 | In-Place Execution | 🔲 Not Started | [phase-2-in-place-execution/](./phases/phase-2-in-place-execution/README.md) |
+| 3 | Niri IPC Integration | 🔲 Not Started | [phase-3-niri-ipc/](./phases/phase-3-niri-ipc/README.md) |
+| 4 | Advanced Metadata | 🔲 Not Started | [phase-4-advanced-metadata/](./phases/phase-4-advanced-metadata/README.md) |
+| 5 | Polish & Features | 🔲 Not Started | [phase-5-polish/](./phases/phase-5-polish/README.md) |
+
+---
+
+## Work Units Overview
+
+### Phase 2: In-Place Execution (3-4 days)
+
+| Unit | Name | Complexity |
+|------|------|------------|
+| 2.1 | [PTY Allocation](./phases/phase-2-in-place-execution/unit-2.1-pty-allocation.md) | High |
+| 2.2 | [Output Capture](./phases/phase-2-in-place-execution/unit-2.2-output-capture.md) | Medium |
+| 2.3 | [Return to Launcher](./phases/phase-2-in-place-execution/unit-2.3-return-to-launcher.md) | Medium |
+| 2.4 | [Interactive Mode](./phases/phase-2-in-place-execution/unit-2.4-interactive-mode.md) | High |
+
+### Phase 3: Niri IPC Integration (1-2 days)
+
+| Unit | Name | Complexity |
+|------|------|------------|
+| 3.1 | [IPC Protocol](./phases/phase-3-niri-ipc/unit-3.1-ipc-protocol.md) | Low |
+| 3.2 | [Window State](./phases/phase-3-niri-ipc/unit-3.2-window-state.md) | Low |
+| 3.3 | [Window Rules](./phases/phase-3-niri-ipc/unit-3.3-window-rules.md) | Low |
+
+### Phase 4: Advanced Metadata (2-3 days)
+
+| Unit | Name | Complexity |
+|------|------|------------|
+| 4.1 | [Terminal Mode Schema](./phases/phase-4-advanced-metadata/unit-4.1-terminal-mode-schema.md) | Medium |
+| 4.2 | [SSH Detection](./phases/phase-4-advanced-metadata/unit-4.2-ssh-detection.md) | Low |
+| 4.3 | [Output Preservation](./phases/phase-4-advanced-metadata/unit-4.3-output-preservation.md) | Medium |
+| 4.4 | [Custom Fields](./phases/phase-4-advanced-metadata/unit-4.4-custom-fields.md) | Medium |
+
+### Phase 5: Polish & Features (3-4 days)
+
+| Unit | Name | Complexity |
+|------|------|------------|
+| 5.1 | [Frecency Sorting](./phases/phase-5-polish/unit-5.1-frecency-sorting.md) | Medium |
+| 5.2 | [Categories](./phases/phase-5-polish/unit-5.2-categories.md) | Medium |
+| 5.3 | [Icons](./phases/phase-5-polish/unit-5.3-icons.md) | Low |
+| 5.4 | [Theming](./phases/phase-5-polish/unit-5.4-theming.md) | Low |
 
 ---
 
@@ -49,181 +109,44 @@ Replace rofi with a TUI-based launcher that:
 
 ---
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        darkwall-tui                          │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │   main.rs   │  │   app.rs    │  │      ui.rs          │  │
-│  │  (CLI/init) │  │   (state)   │  │  (ratatui views)    │  │
-│  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘  │
-│         │                │                     │             │
-│  ┌──────▼──────┐  ┌──────▼──────┐  ┌──────────▼──────────┐  │
-│  │  config.rs  │  │ executor.rs │  │   desktop_entry.rs  │  │
-│  │  (TOML)     │  │ (PTY/spawn) │  │   (XDG parsing)     │  │
-│  └─────────────┘  └──────┬──────┘  └─────────────────────┘  │
-│                          │                                   │
-│                   ┌──────▼──────┐                            │
-│                   │   niri.rs   │                            │
-│                   │   (IPC)     │                            │
-│                   └─────────────┘                            │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Development Phases
-
-### Phase 1: Basic TUI Launcher ✅ COMPLETE
-
-**Goal:** Functional launcher that parses desktop entries and spawns commands.
-
-**Deliverables:**
-- [x] Project scaffolding (Cargo.toml, src structure)
-- [x] Desktop entry parsing (`desktop_entry.rs`)
-- [x] Fuzzy filtering with nucleo
-- [x] Basic TUI with ratatui (`ui.rs`)
-- [x] Configuration loading (`config.rs`)
-- [x] Niri IPC client stub (`niri.rs`)
-- [x] App state management (`app.rs`)
-
-**Current Limitations:**
-- Commands spawn via `sh -c`, not in-place
-- No PTY handling
-- Niri IPC untested
-
----
-
-### Phase 2: In-Place Execution
-
-**Goal:** Execute commands within the same terminal, capture output.
-
-**Work Units:**
-
-#### Unit 2.1: PTY Allocation
-- Create `src/pty.rs` module
-- Allocate PTY for child processes
-- Handle terminal resize (SIGWINCH)
-- **Crates:** `portable-pty` or `pty-process`
-
-#### Unit 2.2: Output Capture
-- Stream stdout/stderr to buffer
-- Display output in TUI (scrollable)
-- Handle ANSI escape codes
-
-#### Unit 2.3: Return to Launcher
-- Detect command exit
-- Show exit code
-- Preserve last N lines of output
-- Re-render launcher below output
-
-#### Unit 2.4: Interactive Mode Detection
-- Detect if command needs raw terminal (TUI apps)
-- Hand over full terminal control
-- Reclaim after exit
-
-**Estimated Effort:** 3-4 days
-
----
-
-### Phase 3: Niri IPC Integration
-
-**Goal:** Seamless window state transitions.
-
-**Work Units:**
-
-#### Unit 3.1: IPC Protocol Implementation
-- Parse niri JSON-RPC responses properly
-- Handle connection errors gracefully
-- Add reconnection logic
-
-#### Unit 3.2: Window State Management
-- `SetWindowFloating` on idle
-- `SetWindowFloating false` on execute
-- Query current window state
-
-#### Unit 3.3: Window Rules Documentation
-- Document required niri config
-- Test with various window sizes
-- Handle multi-monitor scenarios
-
-**Estimated Effort:** 1-2 days
-
----
-
-### Phase 4: Advanced Metadata
-
-**Goal:** Intelligent behavior based on entry metadata.
-
-**Work Units:**
-
-#### Unit 4.1: Terminal Mode Schema
-- Define `terminalMode` enum: `oneshot`, `interactive`, `tui`, `long-running`
-- Parse from desktop entry `X-DarkwallTerminalMode` field
-- Infer from command patterns if not specified
-
-#### Unit 4.2: SSH Detection
-- Parse command for `ssh` prefix
-- Show "Connecting to X..." spinner
-- Handle connection failures
-
-#### Unit 4.3: Output Preservation Logic
-- `keepOutput` per-entry setting
-- Clear screen for TUI apps
-- Preserve for oneshot commands
-
-#### Unit 4.4: Custom Desktop Entry Fields
-- `X-DarkwallTerminalMode`
-- `X-DarkwallKeepOutput`
-- `X-DarkwallUnfloatOnRun`
-- Document in README
-
-**Estimated Effort:** 2-3 days
-
----
-
-### Phase 5: Polish & Features
-
-**Goal:** Production-ready launcher.
-
-**Work Units:**
-
-#### Unit 5.1: Frecency Sorting
-- Track usage count per entry
-- Track last-used timestamp
-- Frecency algorithm: `frequency * recency_weight`
-- Persist to `~/.local/share/darkwall-tui/history.json`
-
-#### Unit 5.2: Categories/Groups
-- Group entries by category
-- Collapsible sections in TUI
-- Category filter shortcuts
-
-#### Unit 5.3: Icons (Optional)
-- Load icons via `freedesktop-icons`
-- Render in TUI (if terminal supports)
-- Fallback to text indicators
-
-#### Unit 5.4: Theming
-- Color scheme configuration
-- Match system theme (dark/light)
-- Border styles
-
-**Estimated Effort:** 3-4 days
-
----
-
 ## File Structure
 
 ```
-darkwall-tui/
+darkwall-drun/
 ├── Cargo.toml
 ├── README.md
 ├── config.example.toml
 ├── docs/
-│   └── DEVELOPMENT.md          # This file
+│   ├── DEVELOPMENT.md          # This file (index)
+│   ├── ARCHITECTURE.md         # System design
+│   ├── TESTING.md              # Test strategy
+│   ├── DEPENDENCIES.md         # Crate info
+│   ├── GETTING_STARTED.md      # New dev guide
+│   └── phases/
+│       ├── phase-1-basic-launcher.md
+│       ├── phase-2-in-place-execution/
+│       │   ├── README.md
+│       │   ├── unit-2.1-pty-allocation.md
+│       │   ├── unit-2.2-output-capture.md
+│       │   ├── unit-2.3-return-to-launcher.md
+│       │   └── unit-2.4-interactive-mode.md
+│       ├── phase-3-niri-ipc/
+│       │   ├── README.md
+│       │   ├── unit-3.1-ipc-protocol.md
+│       │   ├── unit-3.2-window-state.md
+│       │   └── unit-3.3-window-rules.md
+│       ├── phase-4-advanced-metadata/
+│       │   ├── README.md
+│       │   ├── unit-4.1-terminal-mode-schema.md
+│       │   ├── unit-4.2-ssh-detection.md
+│       │   ├── unit-4.3-output-preservation.md
+│       │   └── unit-4.4-custom-fields.md
+│       └── phase-5-polish/
+│           ├── README.md
+│           ├── unit-5.1-frecency-sorting.md
+│           ├── unit-5.2-categories.md
+│           ├── unit-5.3-icons.md
+│           └── unit-5.4-theming.md
 ├── src/
 │   ├── main.rs                 # CLI, init, main loop
 │   ├── app.rs                  # Application state
@@ -242,45 +165,37 @@ darkwall-tui/
 
 ---
 
-## Testing Strategy
+## Team Assignment Guide
 
-### Unit Tests
-- Desktop entry parsing (various formats)
-- Fuzzy matching accuracy
-- Config loading (defaults, overrides)
-
-### Integration Tests
-- Full TUI render cycle
-- Niri IPC (mock socket)
-- Command execution
-
-### Manual Testing
-- Real desktop entries
-- Various terminal emulators (foot, alacritty, kitty)
-- Niri window transitions
+| Phase | Complexity | Skills Needed |
+|-------|------------|---------------|
+| 2.1 PTY | High | Unix systems, PTY internals |
+| 2.2 Output | Medium | Async Rust, TUI |
+| 2.3 Return | Medium | State management |
+| 2.4 Interactive | High | Terminal emulation |
+| 3.x Niri | Low | JSON-RPC, Unix sockets |
+| 4.x Metadata | Medium | Schema design |
+| 5.x Polish | Low-Medium | UX, persistence |
 
 ---
 
-## Dependencies
+## Open Questions
 
-| Crate | Purpose | Version |
-|-------|---------|---------|
-| `ratatui` | TUI framework | 0.29 |
-| `crossterm` | Terminal backend | 0.28 |
-| `freedesktop-desktop-entry` | Parse .desktop files | 0.7 |
-| `nucleo-matcher` | Fuzzy matching | 0.3 |
-| `tokio` | Async runtime | 1.x |
-| `toml` | Config parsing | 0.8 |
-| `serde` | Serialization | 1.x |
-| `clap` | CLI parsing | 4.x |
-| `anyhow` | Error handling | 1.x |
-| `tracing` | Logging | 0.1 |
+1. **PTY vs raw exec:** For TUI apps like btop, do we:
+   - Allocate PTY and proxy I/O? (complex)
+   - Just exec and reclaim terminal after? (simpler)
 
-### Future Dependencies (Phase 2+)
-| Crate | Purpose |
-|-------|---------|
-| `portable-pty` | PTY allocation |
-| `vte` | ANSI escape parsing |
+2. **Multiple instances:** Should we allow multiple darkwall-drun instances?
+   - Single instance with IPC?
+   - Multiple independent instances?
+
+3. **Daemon mode:** Should there be a persistent daemon?
+   - Faster startup (already loaded entries)
+   - Socket for triggering from keybind
+
+4. **Wayland-only:** Do we care about X11 support?
+   - Niri is Wayland-only
+   - Could support other compositors (sway, hyprland)
 
 ---
 
@@ -289,13 +204,13 @@ darkwall-tui/
 Package will be added to NixOS config:
 
 ```nix
-# pkgs/darkwall-tui.nix
+# pkgs/darkwall-drun.nix
 { lib, rustPlatform, ... }:
 
 rustPlatform.buildRustPackage {
-  pname = "darkwall-tui";
+  pname = "darkwall-drun";
   version = "0.1.0";
-  src = /home/vince/Projects/darkwall-tui;
+  src = /home/vince/Projects/darkwall-drun;
   cargoLock.lockFile = ./Cargo.lock;
   
   meta = {
@@ -323,69 +238,6 @@ unfloatOnRun = lib.mkOption {
   default = null;  # Auto based on terminalMode
 };
 ```
-
----
-
-## Open Questions
-
-1. **PTY vs raw exec:** For TUI apps like btop, do we:
-   - Allocate PTY and proxy I/O? (complex)
-   - Just exec and reclaim terminal after? (simpler)
-
-2. **Multiple instances:** Should we allow multiple darkwall-tui instances?
-   - Single instance with IPC?
-   - Multiple independent instances?
-
-3. **Daemon mode:** Should there be a persistent daemon?
-   - Faster startup (already loaded entries)
-   - Socket for triggering from keybind
-
-4. **Wayland-only:** Do we care about X11 support?
-   - Niri is Wayland-only
-   - Could support other compositors (sway, hyprland)
-
----
-
-## Team Assignment Guide
-
-| Phase | Complexity | Skills Needed |
-|-------|------------|---------------|
-| 2.1 PTY | High | Unix systems, PTY internals |
-| 2.2 Output | Medium | Async Rust, TUI |
-| 2.3 Return | Medium | State management |
-| 2.4 Interactive | High | Terminal emulation |
-| 3.x Niri | Low | JSON-RPC, Unix sockets |
-| 4.x Metadata | Medium | Schema design |
-| 5.x Polish | Low-Medium | UX, persistence |
-
----
-
-## Getting Started (For New Teams)
-
-1. Clone and build:
-   ```bash
-   cd /home/vince/Projects/darkwall-tui
-   cargo build
-   ```
-
-2. Run with debug logging:
-   ```bash
-   RUST_LOG=debug cargo run
-   ```
-
-3. Test with foot:
-   ```bash
-   foot --app-id darkwall-tui -e cargo run
-   ```
-
-4. Check niri socket:
-   ```bash
-   echo $NIRI_SOCKET
-   # or
-   ls $XDG_RUNTIME_DIR/niri*
-   ```
-
-5. Pick a work unit from Phase 2 or 3 and create a branch.
 
 ---
 

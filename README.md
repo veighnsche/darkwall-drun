@@ -1,10 +1,10 @@
-# darkwall-tui
+# darkwall-drun
 
 A TUI application launcher with niri compositor integration. Part of the Darkwall suite.
 
 ## Overview
 
-`darkwall-tui` is a terminal-based application launcher that:
+`darkwall-drun` is a terminal-based application launcher that:
 - Parses XDG desktop entries (`.desktop` files)
 - Provides fuzzy search/filtering
 - Integrates with niri compositor for seamless window state transitions
@@ -17,15 +17,15 @@ A TUI application launcher with niri compositor integration. Part of the Darkwal
 cargo build --release
 
 # Run
-./target/release/darkwall-tui
+./target/release/darkwall-drun
 
 # Or with foot terminal (recommended)
-foot --app-id darkwall-tui -e darkwall-tui
+foot --app-id darkwall-drun -e darkwall-drun
 ```
 
 ## Configuration
 
-Copy `config.example.toml` to `~/.config/darkwall-tui/config.toml` and customize.
+Copy `config.example.toml` to `~/.config/darkwall-drun/config.toml` and customize.
 
 ## Niri Window Rules
 
@@ -33,7 +33,7 @@ Add to your niri config (`~/.config/niri/config.kdl`):
 
 ```kdl
 window-rule {
-    match app-id="darkwall-tui"
+    match app-id="darkwall-drun"
     default-column-width { proportion 0.4; }
     open-floating true
 }

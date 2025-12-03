@@ -13,14 +13,14 @@
       in
       {
         packages.default = pkgs.rustPlatform.buildRustPackage {
-          pname = "darkwall-tui";
+          pname = "darkwall-drun";
           version = "0.1.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
 
           meta = with pkgs.lib; {
             description = "TUI application launcher with niri integration";
-            homepage = "https://github.com/vince/darkwall-tui";
+            homepage = "https://github.com/vince/darkwall-drun";
             license = licenses.mit;
             maintainers = [ ];
           };
@@ -30,10 +30,14 @@
           buildInputs = with pkgs; [
             cargo
             rustc
+            rustPlatform.rustLibSrc  # rust-src for rust-analyzer
             rust-analyzer
             clippy
             rustfmt
           ];
+
+          # Point rust-analyzer to the rust source
+          RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
         };
       }
     );

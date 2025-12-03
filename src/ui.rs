@@ -46,7 +46,7 @@ fn draw_search_bar(f: &mut Frame, app: &App, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Blue))
-                .title(" darkwall-tui "),
+                .title(" darkwall-drun "),
         );
 
     f.render_widget(search, area);
