@@ -37,6 +37,8 @@ pub enum AppMode {
     TuiHandover {
         command: String,
     },
+    /// Exit after launching a GUI app (or other exit conditions)
+    Exit,
 }
 
 /// Application state
@@ -351,7 +353,7 @@ impl App {
             return Ok(());
         }
 
-        // Handle GUI apps - launch detached and return to launcher
+        // Handle GUI apps - launch detached and exit
         if terminal_mode == TerminalMode::Gui {
             tracing::info!("Launching GUI app detached: {}", cmd);
             std::process::Command::new("sh")
@@ -361,7 +363,8 @@ impl App {
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .spawn()?;
-            // Stay in launcher mode - GUI app runs independently
+            // Signal exit - GUI app runs independently
+            self.mode = AppMode::Exit;
             return Ok(());
         }
 

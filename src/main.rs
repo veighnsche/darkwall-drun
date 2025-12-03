@@ -156,6 +156,11 @@ async fn run_app<B: ratatui::backend::Backend>(
             continue;
         }
 
+        // Handle exit mode (GUI app launched)
+        if matches!(app.mode(), app::AppMode::Exit) {
+            return Ok(());
+        }
+
         // Poll PTY if executing
         if app.is_executing() {
             app.poll_execution()?;
@@ -202,6 +207,7 @@ async fn handle_key_event(
         AppMode::Executing { .. } => handle_executing_keys(app, key),
         AppMode::PostExecution { .. } => handle_post_execution_keys(app, key),
         AppMode::TuiHandover { .. } => Ok(false), // Handled in main loop
+        AppMode::Exit => Ok(true), // Exit immediately
     }
 }
 

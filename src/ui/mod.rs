@@ -1,7 +1,7 @@
 //! UI module - handles all TUI rendering
 //!
 //! Structure:
-//! - `draw.rs` - Main draw functions
+//! - `draw/` - Drawing functions split by mode (launcher, execution)
 //! - `theme.rs` - Color themes and presets
 //! - `layout.rs` - Grid layout logic
 //! - `entry_card.rs` - Entry card widget
