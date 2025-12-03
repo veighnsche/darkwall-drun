@@ -1,0 +1,37 @@
+# darkwall-tui configuration
+# Copy to ~/.config/darkwall-tui/config.toml
+
+# Directories to search for .desktop files
+desktop_entry_dirs = [
+    "~/.local/share/applications",
+    "/run/current-system/sw/share/applications",
+    "/usr/share/applications",
+]
+
+[appearance]
+# Prompt shown in filter bar
+prompt = "❯ "
+# Prefix for selected entry
+selected_prefix = "● "
+# Prefix for unselected entries
+unselected_prefix = "  "
+
+[niri]
+# Enable niri IPC integration
+enabled = true
+# Socket path (auto-detected if not set)
+# socket_path = "/run/user/1000/niri-socket"
+# Float window when idle (showing launcher)
+float_on_idle = true
+# Unfloat (tile) window when executing command
+unfloat_on_execute = true
+
+[behavior]
+# What to do after command exits: "return", "close", "prompt"
+after_command = "return"
+# Number of output lines to preserve when returning to launcher
+preserve_output_lines = 10
+# Show categories in entry list
+show_categories = true
+# Show generic name below entry name
+show_generic_name = true

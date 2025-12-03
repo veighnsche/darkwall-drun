@@ -1,0 +1,44 @@
+[package]
+name = "darkwall-tui"
+version = "0.1.0"
+edition = "2021"
+description = "TUI application launcher with niri integration"
+authors = ["Vince"]
+license = "MIT"
+repository = "https://github.com/vince/darkwall-tui"
+
+[dependencies]
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
+
+# Desktop entries
+freedesktop-desktop-entry = "0.7"
+freedesktop-icons = "0.2"
+
+# Fuzzy matching
+nucleo-matcher = "0.3"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Config
+toml = "0.8"
+serde = { version = "1", features = ["derive"] }
+dirs = "5"
+shellexpand = "3"
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+[profile.release]
+lto = true
+strip = true
