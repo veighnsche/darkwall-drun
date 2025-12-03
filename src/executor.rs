@@ -57,12 +57,13 @@ impl TerminalMode {
 
         // 3. Known TUI apps (full screen)
         const TUI_APPS: &[&str] = &[
-            "htop", "btop", "top", "vim", "nvim", "nano", "less", "man",
+            "htop", "btop", "top", "vim", "nvim", "neovim", "nano", "less", "man",
             "mc", "ranger", "nnn", "lf", "vifm", "tmux", "screen",
             "mutt", "neomutt", "weechat", "irssi", "cmus", "ncmpcpp",
-            "lazygit", "tig", "gitui", "k9s", "dive",
+            "lazygit", "tig", "gitui", "k9s", "dive", "helix", "hx",
         ];
-        if TUI_APPS.iter().any(|&app| base_cmd == app) {
+        // Check exact match OR if base_cmd ends with the app name (for Nix wrapper scripts like "desktop-btop")
+        if TUI_APPS.iter().any(|&app| base_cmd == app || base_cmd.ends_with(&format!("-{}", app))) {
             return TerminalMode::Tui;
         }
 
@@ -107,6 +108,9 @@ pub struct OutputBuffer {
     scroll_offset: usize,
     /// Current incomplete line (no newline yet)
     partial_line: String,
+    /// Whether to auto-scroll to bottom when new content arrives
+    /// Disabled when user manually scrolls up, re-enabled when scrolling to bottom
+    follow_mode: bool,
 }
 
 /// A single line of output with optional ANSI styling info
@@ -124,23 +128,31 @@ impl OutputBuffer {
             max_lines,
             scroll_offset: 0,
             partial_line: String::new(),
+            follow_mode: true,
         }
     }
 
-    /// Push raw bytes to the buffer, parsing newlines
+    /// Push raw bytes to the buffer, parsing newlines and carriage returns
     pub fn push(&mut self, data: &[u8]) {
         let text = String::from_utf8_lossy(data);
         
         for ch in text.chars() {
-            if ch == '\n' {
-                // Complete the current line
-                let line = std::mem::take(&mut self.partial_line);
-                self.push_line(line);
-            } else if ch == '\r' {
-                // Carriage return - for now just ignore (handle \r\n as \n)
-                // TODO: Handle \r properly for progress bars
-            } else {
-                self.partial_line.push(ch);
+            match ch {
+                '\n' => {
+                    // Complete the current line
+                    let line = std::mem::take(&mut self.partial_line);
+                    self.push_line(line);
+                }
+                '\r' => {
+                    // Carriage return - reset to beginning of current line
+                    // This enables progress bars and rsync-style updates
+                    // If followed by \n, the line will be pushed normally
+                    // If followed by text, it overwrites the current partial line
+                    self.partial_line.clear();
+                }
+                _ => {
+                    self.partial_line.push(ch);
+                }
             }
         }
     }
@@ -195,9 +207,11 @@ impl OutputBuffer {
         self.scroll_offset
     }
 
-    /// Scroll up by n lines
+    /// Scroll up by n lines - disables follow mode
     pub fn scroll_up(&mut self, n: usize) {
         self.scroll_offset = self.scroll_offset.saturating_sub(n);
+        // User scrolled up, disable auto-follow
+        self.follow_mode = false;
     }
 
     /// Scroll down by n lines
@@ -206,23 +220,48 @@ impl OutputBuffer {
         self.scroll_offset = (self.scroll_offset + n).min(max_scroll);
     }
 
-    /// Scroll to top
+    /// Scroll to top - disables follow mode
     pub fn scroll_to_top(&mut self) {
         self.scroll_offset = 0;
+        self.follow_mode = false;
     }
 
-    /// Scroll to bottom
+    /// Scroll to bottom - re-enables follow mode
     pub fn scroll_to_bottom(&mut self, viewport_height: usize) {
         self.scroll_offset = self.lines.len().saturating_sub(viewport_height);
+        self.follow_mode = true;
     }
 
     /// Get visible lines for the given viewport height
-    pub fn visible_lines(&self, viewport_height: usize) -> impl Iterator<Item = &str> {
-        self.lines
+    /// If in follow mode, auto-scrolls to show latest output
+    /// Includes partial line (for prompts like sudo password) when at bottom
+    pub fn visible_lines(&mut self, viewport_height: usize) -> Vec<String> {
+        // Calculate total lines including partial
+        let has_partial = !self.partial_line.is_empty();
+        let total_lines = self.lines.len() + if has_partial { 1 } else { 0 };
+        
+        // Auto-scroll to bottom if in follow mode
+        if self.follow_mode {
+            self.scroll_offset = total_lines.saturating_sub(viewport_height);
+        }
+        
+        let mut result: Vec<String> = self.lines
             .iter()
             .skip(self.scroll_offset)
             .take(viewport_height)
-            .map(|l| l.content.as_str())
+            .map(|l| l.content.clone())
+            .collect();
+        
+        // Include partial line if we're showing the bottom and have room
+        if has_partial && result.len() < viewport_height {
+            // Check if we're at the bottom (would show partial)
+            let lines_before_partial = self.lines.len().saturating_sub(self.scroll_offset);
+            if lines_before_partial <= viewport_height {
+                result.push(self.partial_line.clone());
+            }
+        }
+        
+        result
     }
 
     /// Get the last N lines (for preservation after command exit)
@@ -243,6 +282,12 @@ impl OutputBuffer {
         self.lines.clear();
         self.partial_line.clear();
         self.scroll_offset = 0;
+        self.follow_mode = true;
+    }
+
+    /// Check if follow mode is enabled
+    pub fn is_following(&self) -> bool {
+        self.follow_mode
     }
 }
 
@@ -337,6 +382,11 @@ mod tests {
         assert_eq!(TerminalMode::detect("python", None), TerminalMode::Interactive);
         assert_eq!(TerminalMode::detect("bash", None), TerminalMode::Interactive);
         assert_eq!(TerminalMode::detect("watch ls", None), TerminalMode::LongRunning);
+        
+        // Nix store paths with wrapper scripts
+        assert_eq!(TerminalMode::detect("/nix/store/abc123-desktop-btop", None), TerminalMode::Tui);
+        assert_eq!(TerminalMode::detect("/nix/store/xyz789-desktop-neovim", None), TerminalMode::Tui);
+        assert_eq!(TerminalMode::detect("/nix/store/def456-desktop-nvim", None), TerminalMode::Tui);
     }
 
     #[test]

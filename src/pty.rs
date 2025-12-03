@@ -5,6 +5,8 @@
 use anyhow::{Context, Result};
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use std::io::{Read, Write};
+use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::thread::{self, JoinHandle};
 
 // Re-export ExitStatus for use by other modules
 pub use portable_pty::ExitStatus;
@@ -13,7 +15,10 @@ pub use portable_pty::ExitStatus;
 pub struct PtySession {
     master: Box<dyn MasterPty + Send>,
     child: Box<dyn Child + Send + Sync>,
-    reader: Box<dyn Read + Send>,
+    /// Receiver for output data from the reader thread
+    output_rx: Receiver<Vec<u8>>,
+    /// Handle to the reader thread (for cleanup)
+    _reader_thread: JoinHandle<()>,
     writer: Box<dyn Write + Send>,
 }
 
@@ -52,7 +57,7 @@ impl PtySession {
             .spawn_command(command)
             .context("Failed to spawn command in PTY")?;
 
-        let reader = pair
+        let mut reader = pair
             .master
             .try_clone_reader()
             .context("Failed to clone PTY reader")?;
@@ -62,10 +67,33 @@ impl PtySession {
             .take_writer()
             .context("Failed to take PTY writer")?;
 
+        // Spawn a background thread to read from PTY and send via channel
+        // This provides truly non-blocking reads in the main thread
+        let (tx, rx) = mpsc::channel();
+        let reader_thread = thread::spawn(move || {
+            let mut buf = [0u8; 4096];
+            loop {
+                match reader.read(&mut buf) {
+                    Ok(0) => break, // EOF
+                    Ok(n) => {
+                        if tx.send(buf[..n].to_vec()).is_err() {
+                            break; // Receiver dropped
+                        }
+                    }
+                    Err(e) => {
+                        // Log error and exit thread
+                        tracing::debug!("PTY reader thread error: {}", e);
+                        break;
+                    }
+                }
+            }
+        });
+
         Ok(Self {
             master: pair.master,
             child,
-            reader,
+            output_rx: rx,
+            _reader_thread: reader_thread,
             writer,
         })
     }
@@ -82,16 +110,17 @@ impl PtySession {
             .context("Failed to resize PTY")
     }
 
-    /// Read available data from the PTY (non-blocking attempt)
+    /// Read available data from the PTY (non-blocking)
     /// Returns Ok(None) if no data available, Ok(Some(data)) if data read
     pub fn try_read(&mut self, buf: &mut [u8]) -> Result<Option<usize>> {
-        // portable-pty reader is blocking, so we use a small timeout approach
-        // For now, just do a blocking read - we'll handle this in the async layer
-        match self.reader.read(buf) {
-            Ok(0) => Ok(None), // EOF
-            Ok(n) => Ok(Some(n)),
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
-            Err(e) => Err(e).context("Failed to read from PTY"),
+        match self.output_rx.try_recv() {
+            Ok(data) => {
+                let len = data.len().min(buf.len());
+                buf[..len].copy_from_slice(&data[..len]);
+                Ok(Some(len))
+            }
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Disconnected) => Ok(None), // Reader thread exited
         }
     }
 
@@ -122,14 +151,14 @@ impl PtySession {
             .context("Failed to check child status")
     }
 
-    /// Get a clone of the reader for async operations
-    /// NOTE: Reserved for future async PTY reading implementation
-    #[allow(dead_code)]
-    pub fn take_reader(&mut self) -> Box<dyn Read + Send> {
-        std::mem::replace(
-            &mut self.reader,
-            Box::new(std::io::empty()),
-        )
+    /// Drain all available output from the channel
+    /// Returns all data that's currently buffered
+    pub fn drain_output(&mut self) -> Vec<u8> {
+        let mut output = Vec::new();
+        while let Ok(data) = self.output_rx.try_recv() {
+            output.extend(data);
+        }
+        output
     }
 }
 
@@ -162,22 +191,24 @@ mod tests {
         let mut buf = [0u8; 1024];
         let mut output = Vec::new();
         
-        // Read until EOF or timeout
-        loop {
+        // Poll for output with a timeout
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(2);
+        
+        while start.elapsed() < timeout {
             match session.try_read(&mut buf) {
                 Ok(Some(n)) => output.extend_from_slice(&buf[..n]),
-                Ok(None) => break,
-                Err(_) => break,
-            }
-            if !session.is_alive() {
-                // Read any remaining output
-                while let Ok(Some(n)) = session.try_read(&mut buf) {
-                    output.extend_from_slice(&buf[..n]);
-                    if n == 0 {
+                Ok(None) => {
+                    // No data yet, check if process exited
+                    if !session.is_alive() {
+                        // Drain any remaining buffered output
+                        output.extend(session.drain_output());
                         break;
                     }
+                    // Brief sleep before polling again
+                    std::thread::sleep(std::time::Duration::from_millis(10));
                 }
-                break;
+                Err(_) => break,
             }
         }
         

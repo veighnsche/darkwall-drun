@@ -14,7 +14,7 @@ use crate::ui::layout::GridLayout;
 
 /// Application mode - determines what UI to show and how to handle input
 /// TEAM_000: Phase 2, Unit 2.3 - State transitions
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AppMode {
     /// Normal launcher mode - showing entry list
     Launcher,
@@ -351,8 +351,10 @@ impl App {
             }
         }
 
-        // Clear output buffer for new command
+        // Clear output buffer and filter for new command
         self.output_buffer.clear();
+        self.filter.clear();
+        self.update_filtered();
 
         // Spawn PTY session
         let session = PtySession::spawn(&cmd, cols, rows)?;
@@ -482,6 +484,8 @@ impl App {
     pub fn dismiss_output(&mut self) {
         if matches!(self.mode, AppMode::PostExecution { .. }) {
             self.output_buffer.clear();
+            self.filter.clear();
+            self.update_filtered();
             self.mode = AppMode::Launcher;
         }
     }

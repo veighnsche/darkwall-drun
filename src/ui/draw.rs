@@ -19,13 +19,15 @@ use super::entry_card::{EntryCard, EntryDisplayConfig};
 /// TEAM_000: Phase 2 - Updated for execution modes
 /// TEAM_002: Added icon manager parameter
 /// TEAM_004: Added theme parameter for theming support
-pub fn draw(f: &mut Frame, app: &App, icon_manager: Option<&Arc<Mutex<IconManager>>>) {
+pub fn draw(f: &mut Frame, app: &mut App, icon_manager: Option<&Arc<Mutex<IconManager>>>) {
     // TEAM_004: Resolve theme from config
     let theme = app.config().resolve_theme();
-    match app.mode() {
+    // Clone mode to avoid borrow conflict with &mut app
+    let mode = app.mode().clone();
+    match mode {
         AppMode::Launcher => draw_launcher(f, app, icon_manager, &theme),
-        AppMode::Executing { command, .. } => draw_executing(f, app, command, &theme),
-        AppMode::PostExecution { command, exit_status, preserved_output } => {
+        AppMode::Executing { ref command, .. } => draw_executing(f, app, command, &theme),
+        AppMode::PostExecution { ref command, ref exit_status, ref preserved_output } => {
             draw_post_execution(f, app, command, exit_status, preserved_output, icon_manager, &theme)
         }
         AppMode::TuiHandover { .. } => {
@@ -290,7 +292,7 @@ fn draw_status_bar(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
 /// Draw the executing UI - shows command output
 /// TEAM_000: Phase 2, Unit 2.2 - Output display
 /// TEAM_004: Updated to use theme
-fn draw_executing(f: &mut Frame, app: &App, command: &str, theme: &Theme) {
+fn draw_executing(f: &mut Frame, app: &mut App, command: &str, theme: &Theme) {
     // Fill background
     let bg_block = Block::default().style(Style::default().bg(theme.background));
     f.render_widget(bg_block, f.area());
@@ -318,10 +320,13 @@ fn draw_executing(f: &mut Frame, app: &App, command: &str, theme: &Theme) {
 
     // Output area
     let output_height = chunks[1].height.saturating_sub(2) as usize; // -2 for borders
-    let buffer = app.output_buffer();
+    let buffer = app.output_buffer_mut();
+    let is_following = buffer.is_following();
+    let line_count = buffer.len();
     let lines: Vec<Line> = buffer
         .visible_lines(output_height)
-        .map(|s| Line::from(s.to_string()))
+        .into_iter()
+        .map(|s| Line::from(s))
         .collect();
 
     let output = Paragraph::new(lines)
@@ -336,53 +341,47 @@ fn draw_executing(f: &mut Frame, app: &App, command: &str, theme: &Theme) {
         .wrap(Wrap { trim: false });
     f.render_widget(output, chunks[1]);
 
-    // Status bar
+    // Status bar - show follow mode indicator
+    let follow_indicator = if is_following { "[following]" } else { "[paused]" };
     let status = format!(
-        " {} lines | Ctrl+C: kill | j/k: scroll | g/G: top/bottom",
-        buffer.len()
+        " {} lines {} | Ctrl+C: kill | j/k: scroll | g/G: top/bottom",
+        line_count, follow_indicator
     );
     let status_bar = Paragraph::new(status)
         .style(Style::default().fg(theme.accent).bg(theme.background));
     f.render_widget(status_bar, chunks[2]);
 }
 
-/// Draw the post-execution UI - shows preserved output above launcher
+/// Draw the post-execution UI - shows command output only
 /// TEAM_000: Phase 2, Unit 2.3 - Return to launcher
 /// TEAM_004: Updated to use theme
 fn draw_post_execution(
     f: &mut Frame,
-    app: &App,
+    _app: &App,
     command: &str,
     exit_status: &CommandStatus,
     preserved_output: &[String],
-    icon_manager: Option<&Arc<Mutex<IconManager>>>,
+    _icon_manager: Option<&Arc<Mutex<IconManager>>>,
     theme: &Theme,
 ) {
     // Fill background
     let bg_block = Block::default().style(Style::default().bg(theme.background));
     f.render_widget(bg_block, f.area());
 
-    // Calculate layout based on preserved output
-    let output_lines = preserved_output.len() as u16;
-    let output_height = output_lines.min(10) + 4; // +4 for borders and header
-
+    // Simple layout: output panel + status bar
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(output_height), // Preserved output
-            Constraint::Length(3),             // Search bar
-            Constraint::Min(1),                // Entry list
-            Constraint::Length(1),             // Status bar
+            Constraint::Min(1),    // Output (takes all available space)
+            Constraint::Length(1), // Status bar
         ])
         .split(f.area());
 
-    // Preserved output section
+    // Draw the command output
     draw_preserved_output(f, chunks[0], command, exit_status, preserved_output, theme);
 
-    // Regular launcher below
-    draw_search_bar(f, app, chunks[1], theme);
-    draw_entry_list(f, app, chunks[2], icon_manager, theme);
-    draw_post_execution_status_bar(f, chunks[3], theme);
+    // Status bar with dismiss hint
+    draw_post_execution_status_bar(f, chunks[1], theme);
 }
 
 /// Draw the preserved output section

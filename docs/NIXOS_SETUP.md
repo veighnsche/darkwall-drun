@@ -77,11 +77,11 @@ Or integrate with existing workstation action system if there is one.
 
 ## Summary Checklist
 
-- [ ] Sync `darkwall-drun` project to workstation (like darkwall-model-sync)
-- [ ] Create Nix package for darkwall-drun
-- [ ] Add `drun` alias for development builds
-- [ ] Add niri window rules for floating behavior
-- [ ] Create desktop entry/action to launch drun on workstation remotely
+- [x] Sync `darkwall-drun` project to workstation (like darkwall-model-sync)
+- [x] Create Nix package for darkwall-drun
+- [x] Add `drun` alias for development builds
+- [x] Add niri window rules for floating behavior
+- [x] Create desktop entry/action to launch drun on workstation remotely
 
 ---
 
