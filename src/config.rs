@@ -10,6 +10,7 @@ pub struct Config {
     pub niri: NiriConfig,
     pub behavior: BehaviorConfig,
     pub history: HistoryConfig,
+    pub icons: IconsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,6 +68,31 @@ impl Default for HistoryConfig {
     }
 }
 
+/// TEAM_002: Icons configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct IconsConfig {
+    /// Enable icon display
+    pub enabled: bool,
+    /// Icon size in pixels (for graphics protocols)
+    pub size: u16,
+    /// Fallback mode: "emoji", "nerd", "ascii", "none"
+    pub fallback: String,
+    /// Force icons over SSH (normally disabled)
+    pub force_over_ssh: bool,
+}
+
+impl Default for IconsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            size: 32,
+            fallback: "emoji".to_string(),
+            force_over_ssh: false,
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
@@ -80,6 +106,7 @@ impl Default for Config {
             niri: NiriConfig::default(),
             behavior: BehaviorConfig::default(),
             history: HistoryConfig::default(),
+            icons: IconsConfig::default(),
         }
     }
 }

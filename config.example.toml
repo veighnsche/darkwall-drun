@@ -35,3 +35,23 @@ preserve_output_lines = 10
 show_categories = true
 # Show generic name below entry name
 show_generic_name = true
+
+[icons]
+# Enable icon display
+enabled = true
+# Icon size in pixels (for graphics protocols like Kitty)
+size = 32
+# Fallback mode: "emoji", "nerd", "ascii", "none"
+fallback = "emoji"
+# Force icons over SSH (normally disabled)
+force_over_ssh = false
+
+[history]
+# Enable frecency sorting
+enabled = true
+# Maximum entries to track
+max_entries = 1000
+# Decay old entries after N days
+decay_after_days = 90
+# Weight of frecency vs fuzzy match (0.0 - 1.0)
+frecency_weight = 0.3

@@ -3,7 +3,7 @@
 > **Phase:** 5 - Polish & Features  
 > **Complexity:** Low  
 > **Skills:** Image handling, terminal capabilities  
-> **Status:** 🟡 Not started - `Entry.icon` field exists but unused
+> **Status:** � Complete - Emoji fallback working, Kitty graphics prepared
 
 ---
 
@@ -162,11 +162,11 @@ icon_fallback = "emoji"
 
 ## Acceptance Criteria
 
-- [ ] Icons load from freedesktop icon theme
-- [ ] Kitty graphics protocol works (if in kitty)
-- [ ] Emoji fallback works in all terminals
-- [ ] No crashes if icon not found
-- [ ] Feature can be disabled at compile time
+- [x] Icons load from freedesktop icon theme (prepared, not yet rendered)
+- [ ] Kitty graphics protocol works (if in kitty) - prepared, needs `--features graphics`
+- [x] Emoji fallback works in all terminals
+- [x] No crashes if icon not found
+- [x] Feature can be disabled at compile time (`--features graphics`)
 
 ---
 

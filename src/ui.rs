@@ -5,18 +5,23 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
+use ratatui_image::{StatefulImage, Resize};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 use crate::app::{App, AppMode};
 use crate::executor::CommandStatus;
+use crate::icons::IconManager;
 
 /// Main draw function
 /// TEAM_000: Phase 2 - Updated for execution modes
-pub fn draw(f: &mut Frame, app: &App) {
+/// TEAM_002: Added icon manager parameter
+pub fn draw(f: &mut Frame, app: &App, icon_manager: Option<&Arc<Mutex<IconManager>>>) {
     match app.mode() {
-        AppMode::Launcher => draw_launcher(f, app),
+        AppMode::Launcher => draw_launcher(f, app, icon_manager),
         AppMode::Executing { command, .. } => draw_executing(f, app, command),
         AppMode::PostExecution { command, exit_status, preserved_output } => {
-            draw_post_execution(f, app, command, exit_status, preserved_output)
+            draw_post_execution(f, app, command, exit_status, preserved_output, icon_manager)
         }
         AppMode::TuiHandover { .. } => {
             // TUI handover - we shouldn't be drawing, but show a message just in case
@@ -28,7 +33,7 @@ pub fn draw(f: &mut Frame, app: &App) {
 }
 
 /// Draw the launcher UI (original behavior)
-fn draw_launcher(f: &mut Frame, app: &App) {
+fn draw_launcher(f: &mut Frame, app: &App, icon_manager: Option<&Arc<Mutex<IconManager>>>) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -39,7 +44,7 @@ fn draw_launcher(f: &mut Frame, app: &App) {
         .split(f.area());
 
     draw_search_bar(f, app, chunks[0]);
-    draw_entry_list(f, app, chunks[1]);
+    draw_entry_list(f, app, chunks[1], icon_manager);
     draw_status_bar(f, app, chunks[2]);
 }
 
@@ -79,10 +84,17 @@ fn draw_search_bar(f: &mut Frame, app: &App, area: Rect) {
 }
 
 /// Draw the list of entries
-fn draw_entry_list(f: &mut Frame, app: &App, area: Rect) {
+/// TEAM_002: Graphics icons only - no fallbacks
+fn draw_entry_list(f: &mut Frame, app: &App, area: Rect, icon_manager: Option<&Arc<Mutex<IconManager>>>) {
     let config = app.config();
     let entries = app.visible_entries();
     let selected = app.selected_index();
+
+    // Check if we have graphics support
+    let has_graphics = icon_manager
+        .as_ref()
+        .map(|m| m.lock().supports_graphics())
+        .unwrap_or(false);
 
     let items: Vec<ListItem> = entries
         .iter()
@@ -107,6 +119,7 @@ fn draw_entry_list(f: &mut Frame, app: &App, area: Rect) {
             } else {
                 Style::default().fg(Color::White)
             };
+
             lines.push(Line::from(vec![
                 Span::styled(prefix.clone(), name_style),
                 Span::styled(&entry.name, name_style),
@@ -124,7 +137,7 @@ fn draw_entry_list(f: &mut Frame, app: &App, area: Rect) {
                 }
             }
 
-            // Line 3: Comment (topology info)
+            // Line 3: Comment
             if let Some(ref comment) = entry.comment {
                 lines.push(Line::from(vec![
                     Span::raw("  "),
@@ -152,6 +165,69 @@ fn draw_entry_list(f: &mut Frame, app: &App, area: Rect) {
     );
 
     f.render_widget(list, area);
+
+    // Render graphics icons if available
+    if has_graphics {
+        if let Some(mgr) = icon_manager {
+            render_graphics_icons(f, app, area, mgr);
+        }
+    }
+}
+
+/// Render graphics icons for visible entries
+/// TEAM_002: Kitty/Sixel/iTerm2 graphics protocol support
+fn render_graphics_icons(
+    f: &mut Frame,
+    app: &App,
+    area: Rect,
+    icon_manager: &Arc<Mutex<IconManager>>,
+) {
+    let entries = app.visible_entries();
+    let config = app.config();
+    
+    // Calculate entry height (depends on config)
+    let lines_per_entry = 1 
+        + if config.behavior.show_generic_name { 1 } else { 0 }
+        + 1  // comment
+        + if config.behavior.show_categories { 1 } else { 0 };
+    
+    // Icon area: 2 chars wide, positioned at start of each entry
+    let icon_width = 2u16;
+    let icon_height = lines_per_entry.min(2) as u16; // Max 2 rows per icon
+    
+    let mut mgr = icon_manager.lock();
+    
+    // Start after border
+    let content_area = Rect {
+        x: area.x + 1,
+        y: area.y + 1,
+        width: area.width.saturating_sub(2),
+        height: area.height.saturating_sub(2),
+    };
+    
+    let mut y_offset = 0u16;
+    
+    for entry in entries.iter() {
+        if y_offset + icon_height > content_area.height {
+            break; // No more room
+        }
+        
+        // Try to load/get cached icon
+        if let Some(protocol) = mgr.load_icon(&entry.id, entry.icon.as_deref()) {
+            let icon_area = Rect {
+                x: content_area.x + 2, // After prefix "● "
+                y: content_area.y + y_offset,
+                width: icon_width,
+                height: icon_height,
+            };
+            
+            let image = StatefulImage::new(None).resize(Resize::Fit(None));
+            let mut proto = protocol.lock();
+            f.render_stateful_widget(image, icon_area, &mut *proto);
+        }
+        
+        y_offset += lines_per_entry as u16;
+    }
 }
 
 /// Draw the status bar
@@ -159,14 +235,14 @@ fn draw_status_bar(f: &mut Frame, app: &App, area: Rect) {
     let entries = app.visible_entries();
     let total = entries.len();
 
-    let status = if app.is_filtering() {
+    let status = if app.is_filtering() || !app.filter_text().is_empty() {
         format!(
-            " {} matches | ESC: clear filter | Enter: run | q: quit",
+            " {} matches | ESC: clear | Enter: run | Ctrl+C: quit",
             total
         )
     } else {
         format!(
-            " {}/{} | /: filter | j/k: navigate | Enter: run | q: quit",
+            " {}/{} | Type to filter | ↑↓: navigate | Enter: run | ESC: quit",
             app.selected_index() + 1,
             total
         )
@@ -235,6 +311,7 @@ fn draw_post_execution(
     command: &str,
     exit_status: &CommandStatus,
     preserved_output: &[String],
+    icon_manager: Option<&Arc<Mutex<IconManager>>>,
 ) {
     // Calculate layout based on preserved output
     let output_lines = preserved_output.len() as u16;
@@ -255,7 +332,7 @@ fn draw_post_execution(
 
     // Regular launcher below
     draw_search_bar(f, app, chunks[1]);
-    draw_entry_list(f, app, chunks[2]);
+    draw_entry_list(f, app, chunks[2], icon_manager);
     draw_post_execution_status_bar(f, chunks[3]);
 }
 

@@ -50,6 +50,16 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # CLI
 clap = { version = "4", features = ["derive"] }
 
+# Image support for Kitty/Sixel graphics
+ratatui-image = "3"
+image = "0.25"
+
+# Synchronization
+parking_lot = "0.12"
+
+[features]
+default = []
+
 [profile.release]
 lto = true
 strip = true

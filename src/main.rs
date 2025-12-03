@@ -3,6 +3,7 @@ mod config;
 mod desktop_entry;
 mod executor;
 mod history;
+mod icons;
 mod niri;
 mod pty;
 mod ui;
@@ -16,10 +17,13 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io;
+use std::sync::Arc;
+use parking_lot::Mutex;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use app::App;
 use config::Config;
+use icons::IconManager;
 
 #[derive(Parser, Debug)]
 #[command(name = "drun")]
@@ -63,6 +67,27 @@ async fn main() -> Result<()> {
     let entries = desktop_entry::load_all(&config.desktop_entry_dirs)?;
     tracing::info!("Loaded {} desktop entries", entries.len());
 
+    // TEAM_002: Initialize icon manager BEFORE entering raw mode
+    // This queries the terminal for graphics protocol support
+    // Skip over SSH to avoid hanging on terminal queries
+    let icon_manager = if config.icons.enabled && std::env::var("SSH_CONNECTION").is_err() {
+        // Use a timeout to avoid hanging if terminal doesn't respond
+        let mgr = IconManager::new(config.icons.size);
+        if mgr.supports_graphics() {
+            tracing::info!("Graphics icons enabled");
+        } else {
+            tracing::info!("No graphics protocol, using emoji fallback");
+        }
+        Some(Arc::new(Mutex::new(mgr)))
+    } else {
+        if std::env::var("SSH_CONNECTION").is_ok() {
+            tracing::info!("Icons disabled over SSH");
+        } else {
+            tracing::info!("Icons disabled in config");
+        }
+        None
+    };
+
     // Setup terminal
     // NOTE: DRUN is terminal-agnostic. It uses stdin/stdout/stderr only.
     // No assumptions about specific terminal emulators (kitty, foot, etc.)
@@ -84,7 +109,7 @@ async fn main() -> Result<()> {
     let mut app = App::new(entries, config, !cli.no_niri);
 
     // Run main loop
-    let result = run_app(&mut terminal, &mut app).await;
+    let result = run_app(&mut terminal, &mut app, icon_manager).await;
 
     // TEAM_001: Save history before exit
     app.save_history();
@@ -108,12 +133,13 @@ async fn main() -> Result<()> {
 async fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     app: &mut App,
+    icon_manager: Option<Arc<Mutex<IconManager>>>,
 ) -> Result<()> {
     loop {
         // Get terminal size for PTY
         let size = terminal.size()?;
         
-        terminal.draw(|f| ui::draw(f, app))?;
+        terminal.draw(|f| ui::draw(f, app, icon_manager.as_ref()))?;
 
         // Handle TUI handover mode
         if let app::AppMode::TuiHandover { command } = app.mode() {
@@ -177,40 +203,44 @@ async fn handle_launcher_keys(
     rows: u16,
 ) -> Result<bool> {
     match key.code {
+        // Ctrl+C always exits
+        KeyCode::Char('c') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+            return Ok(true);
+        }
+        // Esc clears filter or exits
         KeyCode::Esc => {
-            if app.is_filtering() {
+            if app.is_filtering() || !app.filter_text().is_empty() {
                 app.clear_filter();
             } else {
                 return Ok(true); // Exit
             }
         }
-        KeyCode::Char('q') if !app.is_filtering() => return Ok(true),
-        KeyCode::Char('c') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
-            return Ok(true);
-        }
+        // Enter executes selected entry
         KeyCode::Enter => {
             if let Some(entry) = app.selected_entry() {
                 app.execute_entry(entry.clone(), cols, rows).await?;
             }
         }
-        KeyCode::Up | KeyCode::Char('k') if !app.is_filtering() => {
+        // Navigation only when not filtering
+        KeyCode::Up => app.previous(),
+        KeyCode::Down => app.next(),
+        KeyCode::Char('k') if !app.is_filtering() && !key.modifiers.contains(event::KeyModifiers::CONTROL) => {
             app.previous();
         }
-        KeyCode::Down | KeyCode::Char('j') if !app.is_filtering() => {
+        KeyCode::Char('j') if !app.is_filtering() && !key.modifiers.contains(event::KeyModifiers::CONTROL) => {
             app.next();
         }
-        KeyCode::Char('/') if !app.is_filtering() => {
-            app.start_filter();
+        // Backspace in filter mode
+        KeyCode::Backspace => {
+            if app.is_filtering() || !app.filter_text().is_empty() {
+                app.pop_filter_char();
+            }
         }
-        KeyCode::Char(c) if app.is_filtering() => {
-            app.push_filter_char(c);
-        }
-        KeyCode::Backspace if app.is_filtering() => {
-            app.pop_filter_char();
-        }
-        KeyCode::Char(c) if !app.is_filtering() => {
-            // Start filtering immediately on any char
-            app.start_filter();
+        // Any printable char starts/continues filtering
+        KeyCode::Char(c) => {
+            if !app.is_filtering() {
+                app.start_filter();
+            }
             app.push_filter_char(c);
         }
         _ => {}

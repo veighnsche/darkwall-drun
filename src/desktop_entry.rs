@@ -12,8 +12,8 @@ pub struct Entry {
     pub generic_name: Option<String>,
     pub comment: Option<String>,
     pub exec: Option<String>,
-    /// NOTE: Stored for future icon display support in TUI
-    #[allow(dead_code)]
+    /// Icon name or path from .desktop file
+    /// TEAM_002: Now used for icon display
     pub icon: Option<String>,
     pub categories: Vec<String>,
     pub keywords: Vec<String>,
@@ -144,6 +144,7 @@ impl Entry {
     pub fn get_darkwall_int(&self, name: &str) -> Option<usize> {
         self.get_darkwall_field(name).and_then(|v| v.parse().ok())
     }
+
 }
 
 /// Load all desktop entries from the given directories
