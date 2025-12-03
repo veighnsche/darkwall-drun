@@ -9,7 +9,6 @@
 //! - 256-color fallback
 
 use ratatui::style::Color;
-use serde::Deserialize;
 
 /// Theme colors for the UI
 #[derive(Debug, Clone)]

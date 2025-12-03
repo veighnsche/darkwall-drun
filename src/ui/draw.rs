@@ -1,8 +1,8 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::Style,
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph},
     Frame,
 };
 use ratatui_image::{StatefulImage, Resize};
@@ -289,10 +289,13 @@ fn draw_status_bar(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     f.render_widget(status_bar, area);
 }
 
-/// Draw the executing UI - shows command output
+/// Draw the executing UI - shows command output using terminal emulator
 /// TEAM_000: Phase 2, Unit 2.2 - Output display
 /// TEAM_004: Updated to use theme
-fn draw_executing(f: &mut Frame, app: &mut App, command: &str, theme: &Theme) {
+/// TEAM_010: Updated to use TerminalWidget
+fn draw_executing(f: &mut Frame, app: &App, command: &str, theme: &Theme) {
+    use crate::terminal::TerminalWidget;
+
     // Fill background
     let bg_block = Block::default().style(Style::default().bg(theme.background));
     f.render_widget(bg_block, f.area());
@@ -318,34 +321,28 @@ fn draw_executing(f: &mut Frame, app: &mut App, command: &str, theme: &Theme) {
         );
     f.render_widget(header, chunks[0]);
 
-    // Output area
-    let output_height = chunks[1].height.saturating_sub(2) as usize; // -2 for borders
-    let buffer = app.output_buffer_mut();
-    let is_following = buffer.is_following();
-    let line_count = buffer.len();
-    let lines: Vec<Line> = buffer
-        .visible_lines(output_height)
-        .into_iter()
-        .map(|s| Line::from(s))
-        .collect();
-
-    let output = Paragraph::new(lines)
-        .style(Style::default().fg(theme.foreground).bg(theme.background))
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.dimmed_alt))
-                .title(" Output ")
-                .style(Style::default().bg(theme.background)),
-        )
-        .wrap(Wrap { trim: false });
-    f.render_widget(output, chunks[1]);
+    // Output area - render terminal widget inside a block
+    let output_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.dimmed_alt))
+        .title(" Output ")
+        .style(Style::default().bg(theme.background));
+    
+    let inner_area = output_block.inner(chunks[1]);
+    f.render_widget(output_block, chunks[1]);
+    
+    // Render terminal widget
+    let terminal = app.terminal();
+    let widget = TerminalWidget::new(terminal).show_cursor(true);
+    f.render_widget(widget, inner_area);
 
     // Status bar - show follow mode indicator
+    let is_following = terminal.is_following();
+    let total_lines = terminal.total_lines();
     let follow_indicator = if is_following { "[following]" } else { "[paused]" };
     let status = format!(
         " {} lines {} | Ctrl+C: kill | j/k: scroll | g/G: top/bottom",
-        line_count, follow_indicator
+        total_lines, follow_indicator
     );
     let status_bar = Paragraph::new(status)
         .style(Style::default().fg(theme.accent).bg(theme.background));

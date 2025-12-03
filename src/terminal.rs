@@ -215,11 +215,31 @@ impl EmbeddedTerminal {
     pub fn set_scroll_offset(&mut self, offset: usize) {
         let max_offset = self.scrollback.len();
         self.scroll_offset = offset.min(max_offset);
+        // Disable follow mode when user scrolls
+        if self.scroll_offset > 0 {
+            self.follow_mode = false;
+        }
+    }
+
+    /// Scroll viewport up (into scrollback history)
+    pub fn scroll_up(&mut self, lines: usize) {
+        let max_offset = self.scrollback.len();
+        self.scroll_offset = (self.scroll_offset + lines).min(max_offset);
+        self.follow_mode = false;
+    }
+
+    /// Scroll viewport down (toward current output)
+    pub fn scroll_down(&mut self, lines: usize) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(lines);
+        if self.scroll_offset == 0 {
+            self.follow_mode = true;
+        }
     }
 
     /// Scroll to bottom (follow mode)
     pub fn scroll_to_bottom(&mut self) {
         self.scroll_offset = 0;
+        self.follow_mode = true;
     }
 
     /// Check if at bottom (following)
@@ -460,7 +480,7 @@ impl EmbeddedTerminal {
     // ========== Mode Handling ==========
 
     fn handle_mode(&mut self, mode: termwiz::escape::csi::Mode) {
-        use termwiz::escape::csi::{DecPrivateMode, DecPrivateModeCode, Mode};
+        use termwiz::escape::csi::{DecPrivateMode, Mode};
 
         match mode {
             Mode::SetDecPrivateMode(DecPrivateMode::Code(code)) => {

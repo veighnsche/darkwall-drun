@@ -282,46 +282,43 @@ async fn handle_launcher_keys(
 
 /// Handle keys in executing mode
 fn handle_executing_keys(app: &mut App, key: event::KeyEvent) -> Result<bool> {
+    use crate::terminal::{convert_keycode, convert_modifiers};
+
     match key.code {
         // Ctrl+C kills the process
         KeyCode::Char('c') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
             app.kill_execution();
         }
-        // Scroll output
-        KeyCode::Up | KeyCode::Char('k') => {
-            app.output_buffer_mut().scroll_up(1);
+        // Scroll output (only when not following/at bottom)
+        KeyCode::Up | KeyCode::Char('k') if !app.terminal().is_at_bottom() => {
+            app.terminal_mut().scroll_up(1);
         }
-        KeyCode::Down | KeyCode::Char('j') => {
-            app.output_buffer_mut().scroll_down(1, 20); // TODO: use actual viewport height
+        KeyCode::Down | KeyCode::Char('j') if !app.terminal().is_at_bottom() => {
+            app.terminal_mut().scroll_down(1);
         }
         KeyCode::Char('u') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
-            app.output_buffer_mut().scroll_up(10);
+            app.terminal_mut().scroll_up(10);
         }
         KeyCode::Char('d') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
-            app.output_buffer_mut().scroll_down(10, 20);
+            app.terminal_mut().scroll_down(10);
         }
         KeyCode::Char('g') => {
-            app.output_buffer_mut().scroll_to_top();
+            // Scroll to top of scrollback
+            let max_offset = app.terminal().scrollback().len();
+            app.terminal_mut().set_scroll_offset(max_offset);
         }
         KeyCode::Char('G') => {
-            app.output_buffer_mut().scroll_to_bottom(20);
+            app.terminal_mut().scroll_to_bottom();
         }
-        // Forward other input to the process
-        KeyCode::Char(c) => {
-            let mut buf = [0u8; 4];
-            let s = c.encode_utf8(&mut buf);
-            app.send_input(s.as_bytes())?;
+        // Forward other input to the process using proper key encoding
+        _ => {
+            let tw_key = convert_keycode(key.code);
+            let tw_mods = convert_modifiers(key.modifiers);
+            let encoded = app.terminal().encode_key(tw_key, tw_mods);
+            if !encoded.is_empty() {
+                app.send_input(encoded.as_bytes())?;
+            }
         }
-        KeyCode::Enter => {
-            app.send_input(b"\n")?;
-        }
-        KeyCode::Backspace => {
-            app.send_input(&[0x7f])?; // DEL
-        }
-        KeyCode::Tab => {
-            app.send_input(b"\t")?;
-        }
-        _ => {}
     }
     Ok(false)
 }

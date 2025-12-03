@@ -6,8 +6,9 @@ use nucleo_matcher::{
 
 use crate::config::Config;
 use crate::desktop_entry::Entry;
-use crate::executor::{CommandStatus, OutputBuffer, TerminalMode};
+use crate::executor::{CommandStatus, TerminalMode};
 use crate::history::History;
+use crate::terminal::{EmbeddedTerminal, TerminalConfig};
 use crate::niri::NiriClient;
 use crate::pty::PtySession;
 use crate::ui::layout::GridLayout;
@@ -57,8 +58,8 @@ pub struct App {
     niri: Option<NiriClient>,
     /// PTY session for current execution (if any)
     pty_session: Option<PtySession>,
-    /// Output buffer for current execution
-    output_buffer: OutputBuffer,
+    /// Terminal emulator for current execution
+    terminal: EmbeddedTerminal,
     /// Fuzzy matcher
     matcher: Matcher,
     /// TEAM_001: Usage history for frecency sorting
@@ -80,7 +81,7 @@ impl App {
             None
         };
 
-        let max_output_lines = config.behavior.preserve_output_lines.max(1000);
+        let scrollback_lines = config.behavior.preserve_output_lines.max(1000);
         
         // TEAM_001: Initialize history
         let mut history = History::new(
@@ -107,7 +108,12 @@ impl App {
             config,
             niri,
             pty_session: None,
-            output_buffer: OutputBuffer::new(max_output_lines),
+            terminal: EmbeddedTerminal::new(TerminalConfig {
+                cols: 80,
+                rows: 24,
+                scrollback: scrollback_lines,
+                ..Default::default()
+            }),
             matcher: Matcher::new(nucleo_matcher::Config::DEFAULT),
             history,
             frecency_weight,
@@ -306,14 +312,14 @@ impl App {
         matches!(self.mode, AppMode::PostExecution { .. })
     }
 
-    /// Get output buffer reference
-    pub fn output_buffer(&self) -> &OutputBuffer {
-        &self.output_buffer
+    /// Get terminal reference
+    pub fn terminal(&self) -> &EmbeddedTerminal {
+        &self.terminal
     }
 
-    /// Get mutable output buffer reference
-    pub fn output_buffer_mut(&mut self) -> &mut OutputBuffer {
-        &mut self.output_buffer
+    /// Get mutable terminal reference
+    pub fn terminal_mut(&mut self) -> &mut EmbeddedTerminal {
+        &mut self.terminal
     }
 
     /// Start executing the selected entry
@@ -351,8 +357,9 @@ impl App {
             }
         }
 
-        // Clear output buffer and filter for new command
-        self.output_buffer.clear();
+        // Clear terminal and filter for new command
+        self.terminal.clear();
+        self.terminal.resize(cols as usize, rows as usize);
         self.filter.clear();
         self.update_filtered();
 
@@ -405,12 +412,12 @@ impl App {
             return Ok(false);
         };
 
-        // Read available output
+        // Read available output and feed to terminal emulator
         let mut buf = [0u8; 4096];
         loop {
             match session.try_read(&mut buf) {
                 Ok(Some(n)) if n > 0 => {
-                    self.output_buffer.push(&buf[..n]);
+                    self.terminal.write(&buf[..n]);
                 }
                 Ok(_) => break, // No more data or EOF
                 Err(e) => {
@@ -424,10 +431,10 @@ impl App {
         match session.try_wait()? {
             Some(status) => {
                 // Process exited
-                self.output_buffer.flush();
-                
                 let exit_status = CommandStatus::from_exit_status(status);
-                let preserved = self.output_buffer.last_n_lines(
+                
+                // Get preserved output from terminal
+                let preserved = self.get_terminal_lines(
                     self.config.behavior.preserve_output_lines
                 );
 
@@ -464,6 +471,22 @@ impl App {
         }
     }
 
+    /// Get lines from terminal for preservation
+    fn get_terminal_lines(&self, max_lines: usize) -> Vec<String> {
+        let rows = self.terminal.get_visible_rows();
+        rows.iter()
+            .take(max_lines)
+            .map(|row| {
+                row.iter()
+                    .map(|cell| cell.str())
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            })
+            .filter(|s| !s.is_empty())
+            .collect()
+    }
+
     /// Send input to the running command
     pub fn send_input(&mut self, data: &[u8]) -> Result<()> {
         if let Some(ref mut session) = self.pty_session {
@@ -472,8 +495,12 @@ impl App {
         Ok(())
     }
 
-    /// Resize the PTY (call on terminal resize)
+    /// Resize the PTY and terminal emulator (call on terminal resize)
     pub fn resize_pty(&mut self, cols: u16, rows: u16) -> Result<()> {
+        // Resize the terminal emulator
+        self.terminal.resize(cols as usize, rows as usize);
+        
+        // Resize the PTY
         if let Some(ref session) = self.pty_session {
             session.resize(cols, rows)?;
         }
@@ -483,7 +510,7 @@ impl App {
     /// Dismiss post-execution output and return to launcher
     pub fn dismiss_output(&mut self) {
         if matches!(self.mode, AppMode::PostExecution { .. }) {
-            self.output_buffer.clear();
+            self.terminal.clear();
             self.filter.clear();
             self.update_filtered();
             self.mode = AppMode::Launcher;
