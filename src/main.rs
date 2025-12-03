@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
         if mgr.supports_graphics() {
             tracing::info!("Graphics icons enabled");
         } else {
-            tracing::info!("No graphics protocol, using emoji fallback");
+            tracing::info!("No graphics protocol detected, icons disabled");
         }
         Some(Arc::new(Mutex::new(mgr)))
     } else {
@@ -138,6 +138,13 @@ async fn run_app<B: ratatui::backend::Backend>(
     loop {
         // Get terminal size for PTY
         let size = terminal.size()?;
+        
+        // Preload one icon per frame (non-blocking gradual loading)
+        if let Some(ref mgr) = icon_manager {
+            let entries = app.visible_entries();
+            let icon_iter = entries.iter().map(|e| (e.id.as_str(), e.icon.as_deref()));
+            mgr.lock().try_load_one(icon_iter);
+        }
         
         terminal.draw(|f| ui::draw(f, app, icon_manager.as_ref()))?;
 

@@ -3,7 +3,7 @@
 > **Phase:** 5 - Polish & Features  
 > **Complexity:** Low  
 > **Skills:** Image handling, terminal capabilities  
-> **Status:** � Complete - Emoji fallback working, Kitty graphics prepared
+> **Status:** ✅ Complete - Kitty/Sixel/iTerm2 graphics protocol support (NO fallback)
 
 ---
 
@@ -162,11 +162,11 @@ icon_fallback = "emoji"
 
 ## Acceptance Criteria
 
-- [x] Icons load from freedesktop icon theme (prepared, not yet rendered)
-- [ ] Kitty graphics protocol works (if in kitty) - prepared, needs `--features graphics`
-- [x] Emoji fallback works in all terminals
+- [x] Icons load from freedesktop icon theme via `freedesktop-icons` crate
+- [x] Kitty/Sixel/iTerm2 graphics protocol works via `ratatui-image` crate
+- [x] No fallback - graphics or nothing (per user requirement)
 - [x] No crashes if icon not found
-- [x] Feature can be disabled at compile time (`--features graphics`)
+- [x] Feature can be disabled via `icons.enabled = false` in config
 
 ---
 

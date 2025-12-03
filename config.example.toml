@@ -41,8 +41,8 @@ show_generic_name = true
 enabled = true
 # Icon size in pixels (for graphics protocols like Kitty)
 size = 32
-# Fallback mode: "emoji", "nerd", "ascii", "none"
-fallback = "emoji"
+# Fallback mode: "none" (graphics only - no emoji/text fallback)
+fallback = "none"
 # Force icons over SSH (normally disabled)
 force_over_ssh = false
 

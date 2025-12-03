@@ -2,7 +2,8 @@
 
 > **Parent:** Unit 5.4 (Theming)  
 > **Complexity:** Low  
-> **Skills:** TOML parsing, serde, config merging
+> **Skills:** TOML parsing, serde, config merging  
+> **Status:** ⏳ PENDING - Needs config.rs updates
 
 ---
 

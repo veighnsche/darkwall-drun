@@ -76,7 +76,8 @@ pub struct IconsConfig {
     pub enabled: bool,
     /// Icon size in pixels (for graphics protocols)
     pub size: u16,
-    /// Fallback mode: "emoji", "nerd", "ascii", "none"
+    /// Fallback mode: "none" (graphics only)
+    #[allow(dead_code)]
     pub fallback: String,
     /// Force icons over SSH (normally disabled)
     pub force_over_ssh: bool,
@@ -87,7 +88,7 @@ impl Default for IconsConfig {
         Self {
             enabled: true,
             size: 32,
-            fallback: "emoji".to_string(),
+            fallback: "none".to_string(),
             force_over_ssh: false,
         }
     }

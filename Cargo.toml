@@ -18,7 +18,6 @@ crossterm = "0.28"
 
 # Desktop entries
 freedesktop-desktop-entry = "0.7"
-freedesktop-icons = "0.2"
 
 # Fuzzy matching
 nucleo-matcher = "0.3"
@@ -54,8 +53,16 @@ clap = { version = "4", features = ["derive"] }
 ratatui-image = "3"
 image = "0.25"
 
+# SVG rendering for icons
+resvg = "0.44"
+usvg = "0.44"
+tiny-skia = "0.11"
+
 # Synchronization
 parking_lot = "0.12"
+
+# Text width calculation for TUI
+unicode-width = "0.2"
 
 [features]
 default = []

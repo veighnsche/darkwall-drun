@@ -83,6 +83,9 @@ fn draw_search_bar(f: &mut Frame, app: &App, area: Rect) {
     }
 }
 
+/// Width of icon column in characters when graphics are supported
+const ICON_COLUMN_WIDTH: usize = 6;
+
 /// Draw the list of entries
 /// TEAM_002: Graphics icons only - no fallbacks
 fn draw_entry_list(f: &mut Frame, app: &App, area: Rect, icon_manager: Option<&Arc<Mutex<IconManager>>>) {
@@ -95,6 +98,10 @@ fn draw_entry_list(f: &mut Frame, app: &App, area: Rect, icon_manager: Option<&A
         .as_ref()
         .map(|m| m.lock().supports_graphics())
         .unwrap_or(false);
+
+    // Reserve space for icon column if graphics supported
+    let icon_padding = if has_graphics { " ".repeat(ICON_COLUMN_WIDTH) } else { String::new() };
+    let line_indent = if has_graphics { " ".repeat(ICON_COLUMN_WIDTH + 2) } else { "  ".to_string() };
 
     let items: Vec<ListItem> = entries
         .iter()
@@ -111,7 +118,7 @@ fn draw_entry_list(f: &mut Frame, app: &App, area: Rect, icon_manager: Option<&A
             // Build the display lines
             let mut lines = vec![];
 
-            // Line 1: Name
+            // Line 1: Name (with icon padding if graphics supported)
             let name_style = if is_selected {
                 Style::default()
                     .fg(Color::Cyan)
@@ -122,6 +129,7 @@ fn draw_entry_list(f: &mut Frame, app: &App, area: Rect, icon_manager: Option<&A
 
             lines.push(Line::from(vec![
                 Span::styled(prefix.clone(), name_style),
+                Span::raw(icon_padding.clone()),
                 Span::styled(&entry.name, name_style),
             ]));
 
@@ -130,7 +138,7 @@ fn draw_entry_list(f: &mut Frame, app: &App, area: Rect, icon_manager: Option<&A
                 if let Some(ref gn) = entry.generic_name {
                     if gn != &entry.name {
                         lines.push(Line::from(vec![
-                            Span::raw("  "),
+                            Span::raw(line_indent.clone()),
                             Span::styled(gn, Style::default().fg(Color::Gray)),
                         ]));
                     }
@@ -140,7 +148,7 @@ fn draw_entry_list(f: &mut Frame, app: &App, area: Rect, icon_manager: Option<&A
             // Line 3: Comment
             if let Some(ref comment) = entry.comment {
                 lines.push(Line::from(vec![
-                    Span::raw("  "),
+                    Span::raw(line_indent.clone()),
                     Span::styled(comment, Style::default().fg(Color::DarkGray)),
                 ]));
             }
@@ -149,7 +157,7 @@ fn draw_entry_list(f: &mut Frame, app: &App, area: Rect, icon_manager: Option<&A
             if config.behavior.show_categories && !entry.categories.is_empty() {
                 let cats = entry.categories.join(",");
                 lines.push(Line::from(vec![
-                    Span::raw("  "),
+                    Span::raw(line_indent.clone()),
                     Span::styled(cats, Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
                 ]));
             }
@@ -186,16 +194,11 @@ fn render_graphics_icons(
     let config = app.config();
     
     // Calculate entry height (depends on config)
-    let lines_per_entry = 1 
-        + if config.behavior.show_generic_name { 1 } else { 0 }
-        + 1  // comment
-        + if config.behavior.show_categories { 1 } else { 0 };
+    let lines_per_entry = calculate_lines_per_entry(config);
     
-    // Icon area: 2 chars wide, positioned at start of each entry
-    let icon_width = 2u16;
+    // Icon area dimensions
+    let icon_width = ICON_COLUMN_WIDTH as u16;
     let icon_height = lines_per_entry.min(2) as u16; // Max 2 rows per icon
-    
-    let mut mgr = icon_manager.lock();
     
     // Start after border
     let content_area = Rect {
@@ -205,29 +208,46 @@ fn render_graphics_icons(
         height: area.height.saturating_sub(2),
     };
     
-    let mut y_offset = 0u16;
-    
-    for entry in entries.iter() {
-        if y_offset + icon_height > content_area.height {
-            break; // No more room
-        }
+    // Collect icons to render (only from cache, non-blocking)
+    let mut icons_to_render = Vec::new();
+    {
+        let mgr = icon_manager.lock();
+        let mut y_offset = 0u16;
         
-        // Try to load/get cached icon
-        if let Some(protocol) = mgr.load_icon(&entry.id, entry.icon.as_deref()) {
-            let icon_area = Rect {
-                x: content_area.x + 2, // After prefix "● "
-                y: content_area.y + y_offset,
-                width: icon_width,
-                height: icon_height,
-            };
+        for entry in entries.iter() {
+            if y_offset + icon_height > content_area.height {
+                break; // No more room
+            }
             
-            let image = StatefulImage::new(None).resize(Resize::Fit(None));
-            let mut proto = protocol.lock();
-            f.render_stateful_widget(image, icon_area, &mut *proto);
+            // Only get cached icons - don't block rendering
+            if let Some(protocol) = mgr.get_cached(&entry.id) {
+                icons_to_render.push((y_offset, protocol));
+            }
+            
+            y_offset += lines_per_entry as u16;
         }
+    } // Release lock before rendering
+    
+    // Render collected icons
+    for (y_offset, protocol) in icons_to_render {
+        let icon_area = Rect {
+            x: content_area.x + 2, // After prefix "● "
+            y: content_area.y + y_offset,
+            width: icon_width,
+            height: icon_height,
+        };
         
-        y_offset += lines_per_entry as u16;
+        let image = StatefulImage::new(None).resize(Resize::Fit(None));
+        let mut proto = protocol.lock();
+        f.render_stateful_widget(image, icon_area, &mut *proto);
     }
+}
+
+/// Calculate lines per entry based on config
+fn calculate_lines_per_entry(config: &crate::config::Config) -> usize {
+    1 + if config.behavior.show_generic_name { 1 } else { 0 }
+      + 1  // comment
+      + if config.behavior.show_categories { 1 } else { 0 }
 }
 
 /// Draw the status bar
