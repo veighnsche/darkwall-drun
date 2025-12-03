@@ -203,6 +203,7 @@ async fn handle_key_event(
 }
 
 /// Handle keys in launcher mode
+/// TEAM_004: Added grid navigation (left/right/tab/page)
 async fn handle_launcher_keys(
     app: &mut App,
     key: event::KeyEvent,
@@ -228,14 +229,37 @@ async fn handle_launcher_keys(
                 app.execute_entry(entry.clone(), cols, rows).await?;
             }
         }
-        // Navigation only when not filtering
+        // Navigation - arrows always work
         KeyCode::Up => app.previous(),
         KeyCode::Down => app.next(),
+        KeyCode::Left => app.move_left(),
+        KeyCode::Right => app.move_right(),
+        // TEAM_004: Page navigation
+        KeyCode::PageUp => app.page_up(),
+        KeyCode::PageDown => app.page_down(),
+        KeyCode::Home => app.move_home(),
+        KeyCode::End => app.move_end(),
+        // TEAM_004: Tab navigation (wraps around)
+        KeyCode::Tab => {
+            if key.modifiers.contains(event::KeyModifiers::SHIFT) {
+                app.tab_prev();
+            } else {
+                app.tab_next();
+            }
+        }
+        KeyCode::BackTab => app.tab_prev(),
+        // Vim-style navigation only when not filtering
         KeyCode::Char('k') if !app.is_filtering() && !key.modifiers.contains(event::KeyModifiers::CONTROL) => {
             app.previous();
         }
         KeyCode::Char('j') if !app.is_filtering() && !key.modifiers.contains(event::KeyModifiers::CONTROL) => {
             app.next();
+        }
+        KeyCode::Char('h') if !app.is_filtering() && !key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+            app.move_left();
+        }
+        KeyCode::Char('l') if !app.is_filtering() && !key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+            app.move_right();
         }
         // Backspace in filter mode
         KeyCode::Backspace => {

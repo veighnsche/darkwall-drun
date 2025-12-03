@@ -3,7 +3,7 @@
 > **Parent:** Unit 5.4 (Theming)  
 > **Complexity:** Medium  
 > **Skills:** Ratatui widgets, text styling  
-> **Status:** ✅ PREPARED - `src/ui/entry_card.rs` implemented and tested
+> **Status:** ✅ COMPLETE - Integrated into draw.rs by TEAM_004
 
 ---
 

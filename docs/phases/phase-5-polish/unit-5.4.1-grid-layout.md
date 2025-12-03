@@ -3,7 +3,7 @@
 > **Parent:** Unit 5.4 (Theming)  
 > **Complexity:** Low  
 > **Skills:** Ratatui layout, constraint calculation  
-> **Status:** ✅ PREPARED - `src/ui/layout.rs` implemented and tested
+> **Status:** ✅ COMPLETE - Integrated into draw.rs by TEAM_004
 
 ---
 

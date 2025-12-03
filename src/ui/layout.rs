@@ -156,8 +156,9 @@ impl GridLayout {
     }
 }
 
-/// Navigation direction
+/// Navigation direction (prepared for future use)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum Direction {
     Up,
     Down,

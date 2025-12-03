@@ -3,7 +3,7 @@
 > **Parent:** Unit 5.4 (Theming)  
 > **Complexity:** Low  
 > **Skills:** TOML parsing, serde, config merging  
-> **Status:** ⏳ PENDING - Needs config.rs updates
+> **Status:** ✅ COMPLETE - config.rs updated by TEAM_004
 
 ---
 

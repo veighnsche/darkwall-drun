@@ -10,6 +10,7 @@ use crate::executor::{CommandStatus, OutputBuffer, TerminalMode};
 use crate::history::History;
 use crate::niri::NiriClient;
 use crate::pty::PtySession;
+use crate::ui::layout::GridLayout;
 
 /// Application mode - determines what UI to show and how to handle input
 /// TEAM_000: Phase 2, Unit 2.3 - State transitions
@@ -64,6 +65,8 @@ pub struct App {
     history: History,
     /// TEAM_001: Frecency weight from config
     frecency_weight: f64,
+    /// TEAM_004: Grid layout for 2-column display
+    grid_layout: GridLayout,
 }
 
 impl App {
@@ -91,6 +94,9 @@ impl App {
         }
         let frecency_weight = config.history.frecency_weight;
         
+        // TEAM_004: Initialize grid layout from config
+        let grid_layout = config.grid_layout();
+        
         Self {
             mode: AppMode::Launcher,
             entries,
@@ -105,6 +111,7 @@ impl App {
             matcher: Matcher::new(nucleo_matcher::Config::DEFAULT),
             history,
             frecency_weight,
+            grid_layout,
         }
     }
 
@@ -125,16 +132,57 @@ impl App {
 
     /// Move selection up
     pub fn previous(&mut self) {
-        if self.selected > 0 {
-            self.selected -= 1;
-        }
+        self.selected = self.grid_layout.move_up(self.selected);
     }
 
     /// Move selection down
     pub fn next(&mut self) {
-        if self.selected < self.filtered.len().saturating_sub(1) {
-            self.selected += 1;
-        }
+        self.selected = self.grid_layout.move_down(self.selected, self.filtered.len());
+    }
+
+    /// TEAM_004: Move selection left (previous column)
+    pub fn move_left(&mut self) {
+        self.selected = self.grid_layout.move_left(self.selected);
+    }
+
+    /// TEAM_004: Move selection right (next column)
+    pub fn move_right(&mut self) {
+        self.selected = self.grid_layout.move_right(self.selected, self.filtered.len());
+    }
+
+    /// TEAM_004: Tab navigation (next with wrap)
+    pub fn tab_next(&mut self) {
+        self.selected = self.grid_layout.tab_next(self.selected, self.filtered.len());
+    }
+
+    /// TEAM_004: Shift+Tab navigation (previous with wrap)
+    pub fn tab_prev(&mut self) {
+        self.selected = self.grid_layout.tab_prev(self.selected, self.filtered.len());
+    }
+
+    /// TEAM_004: Page up
+    pub fn page_up(&mut self) {
+        self.selected = self.grid_layout.page_up(self.selected);
+    }
+
+    /// TEAM_004: Page down
+    pub fn page_down(&mut self) {
+        self.selected = self.grid_layout.page_down(self.selected, self.filtered.len());
+    }
+
+    /// TEAM_004: Move to first entry
+    pub fn move_home(&mut self) {
+        self.selected = self.grid_layout.move_home();
+    }
+
+    /// TEAM_004: Move to last entry
+    pub fn move_end(&mut self) {
+        self.selected = self.grid_layout.move_end(self.filtered.len());
+    }
+
+    /// TEAM_004: Get grid layout reference
+    pub fn grid_layout(&self) -> &GridLayout {
+        &self.grid_layout
     }
 
     /// Check if currently filtering
