@@ -24,6 +24,7 @@ pub struct TerminalConfig {
     /// Maximum scrollback lines
     pub scrollback: usize,
     /// Whether to enable alternate screen buffer
+    #[allow(dead_code)] // Config option for future use
     pub alternate_screen: bool,
 }
 
@@ -46,6 +47,7 @@ pub struct CursorPosition {
 }
 
 impl CursorPosition {
+    #[allow(dead_code)] // Used in tests
     pub fn new(col: usize, row: usize) -> Self {
         Self { col, row }
     }
@@ -110,6 +112,7 @@ impl EmbeddedTerminal {
     }
 
     /// Create with default 80x24 size
+    #[allow(dead_code)] // Public API for tests and future use
     pub fn default_size() -> Self {
         Self::new(TerminalConfig::default())
     }
@@ -127,6 +130,7 @@ impl EmbeddedTerminal {
     }
 
     /// Get a reference to the surface
+    #[allow(dead_code)] // Public API for future use
     pub fn surface(&self) -> &Surface {
         &self.surface
     }
@@ -137,6 +141,7 @@ impl EmbeddedTerminal {
     }
 
     /// Get the scroll offset
+    #[allow(dead_code)] // Public API for future use
     pub fn scroll_offset(&self) -> usize {
         self.scroll_offset
     }
@@ -147,11 +152,13 @@ impl EmbeddedTerminal {
     }
 
     /// Check if in alternate screen mode
+    #[allow(dead_code)] // Public API for future use
     pub fn in_alternate_screen(&self) -> bool {
         self.in_alternate_screen
     }
 
     /// Get mutable reference to surface
+    #[allow(dead_code)] // Public API for future use
     pub fn surface_mut(&mut self) -> &mut Surface {
         &mut self.surface
     }
@@ -296,6 +303,7 @@ impl EmbeddedTerminal {
     // ========== Follow Mode ==========
 
     /// Enable/disable follow mode
+    #[allow(dead_code)] // Public API for future use
     pub fn set_follow_mode(&mut self, follow: bool) {
         self.follow_mode = follow;
         if follow {
@@ -341,11 +349,13 @@ impl EmbeddedTerminal {
     }
 
     /// Check if mouse reporting is enabled
+    #[allow(dead_code)] // Public API for future use
     pub fn mouse_enabled(&self) -> bool {
         self.mouse_reporting
     }
 
     /// Check if application cursor keys mode is enabled
+    #[allow(dead_code)] // Public API for future use
     pub fn application_cursor_keys(&self) -> bool {
         self.application_cursor_keys
     }
@@ -1063,6 +1073,7 @@ pub fn convert_keycode(ct_code: crossterm::event::KeyCode) -> KeyCode {
 }
 
 /// Convert a crossterm key event to encoded bytes for the PTY
+#[allow(dead_code)] // Public API for future use
 pub fn encode_crossterm_key(
     terminal: &EmbeddedTerminal,
     key: &crossterm::event::KeyEvent,

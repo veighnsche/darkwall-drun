@@ -11,10 +11,5 @@ pub mod entry_card;
 pub mod layout;
 pub mod theme;
 
-// Re-export main draw function
+// Re-export main draw function (used by main.rs)
 pub use draw::draw;
-
-// Re-export commonly used types
-pub use entry_card::{EntryCard, EntryDisplayConfig};
-pub use layout::GridLayout;
-pub use theme::Theme;

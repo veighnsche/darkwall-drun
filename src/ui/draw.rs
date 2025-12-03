@@ -103,6 +103,27 @@ const ICON_COLUMN_WIDTH: u16 = 6;
 /// Gap between columns
 const COLUMN_GAP: u16 = 2;
 
+/// Pre-computed grid dimensions for rendering
+struct GridDimensions {
+    card_height: u16,
+    column_width: u16,
+}
+
+impl GridDimensions {
+    fn compute(inner_width: u16, grid: &crate::ui::layout::GridLayout, entry_config: &EntryDisplayConfig) -> Self {
+        let columns = grid.columns as usize;
+        let column_width = if columns > 1 {
+            (inner_width.saturating_sub(COLUMN_GAP * (columns as u16 - 1))) / columns as u16
+        } else {
+            inner_width
+        };
+        Self {
+            card_height: entry_config.card_height(),
+            column_width,
+        }
+    }
+}
+
 /// Draw the list of entries using grid layout
 /// TEAM_004: Rewritten to use GridLayout and EntryCard
 fn draw_entry_list(f: &mut Frame, app: &App, area: Rect, icon_manager: Option<&Arc<Mutex<IconManager>>>, theme: &Theme) {
@@ -143,13 +164,7 @@ fn draw_entry_list(f: &mut Frame, app: &App, area: Rect, icon_manager: Option<&A
     let page_start = visible_range.start;
 
     // Calculate card dimensions
-    let card_height = entry_config.card_height();
-    let columns = grid.columns as usize;
-    let column_width = if columns > 1 {
-        (inner.width.saturating_sub(COLUMN_GAP * (columns as u16 - 1))) / columns as u16
-    } else {
-        inner.width
-    };
+    let dims = GridDimensions::compute(inner.width, grid, &entry_config);
 
     // Render each visible entry as a card
     for (local_idx, entry) in visible_entries.iter().enumerate() {
@@ -160,17 +175,17 @@ fn draw_entry_list(f: &mut Frame, app: &App, area: Rect, icon_manager: Option<&A
         let (row, col) = grid.index_to_position(local_idx);
 
         // Calculate card area
-        let card_x = inner.x + col * (column_width + COLUMN_GAP);
-        let card_y = inner.y + row * card_height;
+        let card_x = inner.x + col * (dims.column_width + COLUMN_GAP);
+        let card_y = inner.y + row * dims.card_height;
         let card_area = Rect {
             x: card_x,
             y: card_y,
-            width: column_width,
-            height: card_height,
+            width: dims.column_width,
+            height: dims.card_height,
         };
 
         // Skip if card is outside visible area
-        if card_y + card_height > inner.y + inner.height {
+        if card_y + dims.card_height > inner.y + inner.height {
             continue;
         }
 
@@ -198,22 +213,15 @@ fn render_graphics_icons_grid(
     inner: Rect,
     icon_manager: &Arc<Mutex<IconManager>>,
     entry_config: &EntryDisplayConfig,
-    page_start: usize,
+    _page_start: usize,
 ) {
     let entries = app.visible_entries();
     let grid = app.grid_layout();
-    
-    let card_height = entry_config.card_height();
-    let columns = grid.columns as usize;
-    let column_width = if columns > 1 {
-        (inner.width.saturating_sub(COLUMN_GAP * (columns as u16 - 1))) / columns as u16
-    } else {
-        inner.width
-    };
+    let dims = GridDimensions::compute(inner.width, grid, entry_config);
     
     // Icon dimensions
     let icon_width = ICON_COLUMN_WIDTH;
-    let icon_height = card_height.min(2); // Max 2 rows per icon
+    let icon_height = dims.card_height.min(2); // Max 2 rows per icon
     
     // Get visible range
     let visible_range = grid.visible_range(app.selected_index(), entries.len());
@@ -228,11 +236,11 @@ fn render_graphics_icons_grid(
             let (row, col) = grid.index_to_position(local_idx);
             
             // Calculate position
-            let card_x = inner.x + col * (column_width + COLUMN_GAP);
-            let card_y = inner.y + row * card_height;
+            let card_x = inner.x + col * (dims.column_width + COLUMN_GAP);
+            let card_y = inner.y + row * dims.card_height;
             
             // Skip if outside visible area
-            if card_y + card_height > inner.y + inner.height {
+            if card_y + dims.card_height > inner.y + inner.height {
                 continue;
             }
             

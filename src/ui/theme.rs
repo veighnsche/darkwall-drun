@@ -219,6 +219,7 @@ fn approximate_256(color: Color) -> Color {
 }
 
 /// Serde deserializer for hex colors
+#[allow(dead_code)] // Public API for serde(deserialize_with) usage
 pub mod serde_color {
     use super::*;
     use serde::{Deserialize, Deserializer};

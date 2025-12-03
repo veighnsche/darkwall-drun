@@ -153,6 +153,7 @@ impl PtySession {
 
     /// Drain all available output from the channel
     /// Returns all data that's currently buffered
+    #[allow(dead_code)] // Used in tests, available for future use
     pub fn drain_output(&mut self) -> Vec<u8> {
         let mut output = Vec::new();
         while let Ok(data) = self.output_rx.try_recv() {

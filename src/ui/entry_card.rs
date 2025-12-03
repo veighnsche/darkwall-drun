@@ -94,101 +94,69 @@ impl<'a> Widget for EntryCard<'a> {
             return;
         }
 
-        // Background color based on selection
-        let bg = if self.selected {
-            self.theme.selection_bg
-        } else {
-            self.theme.background
-        };
+        let bg = if self.selected { self.theme.selection_bg } else { self.theme.background };
+        let fg = if self.selected { self.theme.selection_fg } else { self.theme.foreground };
 
         // Fill background
         for y in area.y..area.y + area.height {
             for x in area.x..area.x + area.width {
-                buf.get_mut(x, y).set_bg(bg);
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_bg(bg);
+                }
             }
         }
 
         // Calculate inner area with padding
         let padding_x = 1u16;
-        let inner = Rect {
-            x: area.x + padding_x,
-            y: area.y,
-            width: area.width.saturating_sub(padding_x * 2),
-            height: area.height,
-        };
-
-        if inner.width == 0 {
+        let inner_width = area.width.saturating_sub(padding_x * 2);
+        if inner_width == 0 {
             return;
         }
 
-        let mut y = inner.y;
+        let inner_x = area.x + padding_x;
+        let max_y = area.y + area.height;
+        let mut y = area.y;
 
         // Icon space offset (for alignment when graphics icons are shown elsewhere)
         let icon_offset = if self.icon_space { 6 } else { 0 };
-        let text_x = inner.x + icon_offset;
-        let text_width = inner.width.saturating_sub(icon_offset);
+        let text_x = inner_x + icon_offset;
+        let text_width = inner_width.saturating_sub(icon_offset) as usize;
 
-        // Line 1: Name (bold)
-        let name_style = Style::default()
-            .fg(if self.selected { self.theme.selection_fg } else { self.theme.foreground })
-            .bg(bg)
-            .add_modifier(Modifier::BOLD);
-        
-        let name = truncate(&self.entry.name, text_width as usize);
-        buf.set_string(text_x, y, &name, name_style);
+        // Line 1: Name (bold) - always rendered
+        let name_style = Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD);
+        buf.set_string(text_x, y, truncate(&self.entry.name, text_width), name_style);
         y += 1;
-
-        if y >= area.y + area.height {
-            return;
-        }
 
         // Indent for subsequent lines
         let indent = 3u16;
         let sub_x = text_x + indent;
-        let sub_width = text_width.saturating_sub(indent);
+        let sub_width = text_width.saturating_sub(indent as usize);
 
-        // Line 2: GenericName
-        if self.config.show_generic {
+        // Line 2: GenericName (if enabled and room available)
+        if self.config.show_generic && y < max_y {
             if let Some(ref generic) = self.entry.generic_name {
                 if generic != &self.entry.name {
-                    let style = Style::default()
-                        .fg(if self.selected { self.theme.selection_fg } else { self.theme.foreground })
-                        .bg(bg);
-                    let text = truncate(generic, sub_width as usize);
-                    buf.set_string(sub_x, y, &text, style);
+                    let style = Style::default().fg(fg).bg(bg);
+                    buf.set_string(sub_x, y, truncate(generic, sub_width), style);
                 }
             }
             y += 1;
         }
 
-        if y >= area.y + area.height {
-            return;
-        }
-
-        // Line 3: Comment
-        if self.config.show_comment {
+        // Line 3: Comment (if enabled and room available)
+        if self.config.show_comment && y < max_y {
             if let Some(ref comment) = self.entry.comment {
-                let style = Style::default()
-                    .fg(self.theme.dimmed)
-                    .bg(bg);
-                let text = truncate(comment, sub_width as usize);
-                buf.set_string(sub_x, y, &text, style);
+                let style = Style::default().fg(self.theme.dimmed).bg(bg);
+                buf.set_string(sub_x, y, truncate(comment, sub_width), style);
             }
             y += 1;
         }
 
-        if y >= area.y + area.height {
-            return;
-        }
-
-        // Line 4: Categories
-        if self.config.show_categories && !self.entry.categories.is_empty() {
+        // Line 4: Categories (if enabled, non-empty, and room available)
+        if self.config.show_categories && y < max_y && !self.entry.categories.is_empty() {
             let cats = self.entry.categories.join(",");
-            let style = Style::default()
-                .fg(self.theme.dimmed_alt)
-                .bg(bg);
-            let text = truncate(&cats, sub_width as usize);
-            buf.set_string(sub_x, y, &text, style);
+            let style = Style::default().fg(self.theme.dimmed_alt).bg(bg);
+            buf.set_string(sub_x, y, truncate(&cats, sub_width), style);
         }
     }
 }

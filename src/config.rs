@@ -235,85 +235,35 @@ impl Config {
 
     /// TEAM_004: Resolve theme from preset + color overrides
     pub fn resolve_theme(&self) -> Theme {
+        use ratatui::style::Color;
+
         // Start with preset or default
         let mut theme = self.theme.preset
             .as_ref()
             .and_then(|name| Theme::from_preset(name))
             .unwrap_or_default();
 
-        // Apply color overrides
+        // Helper to parse and apply a color override
+        let apply_color = |opt: &Option<String>, target: &mut Color, name: &str| {
+            if let Some(ref hex) = opt {
+                match parse_hex_color(hex) {
+                    Ok(color) => *target = color,
+                    Err(_) => tracing::warn!("Invalid {} color: {}", name, hex),
+                }
+            }
+        };
+
         let colors = &self.theme.colors;
-        
-        if let Some(ref c) = colors.background {
-            if let Ok(color) = parse_hex_color(c) {
-                theme.background = color;
-            } else {
-                tracing::warn!("Invalid background color: {}", c);
-            }
-        }
-        if let Some(ref c) = colors.foreground {
-            if let Ok(color) = parse_hex_color(c) {
-                theme.foreground = color;
-            } else {
-                tracing::warn!("Invalid foreground color: {}", c);
-            }
-        }
-        if let Some(ref c) = colors.selection_bg {
-            if let Ok(color) = parse_hex_color(c) {
-                theme.selection_bg = color;
-            } else {
-                tracing::warn!("Invalid selection_bg color: {}", c);
-            }
-        }
-        if let Some(ref c) = colors.selection_fg {
-            if let Ok(color) = parse_hex_color(c) {
-                theme.selection_fg = color;
-            } else {
-                tracing::warn!("Invalid selection_fg color: {}", c);
-            }
-        }
-        if let Some(ref c) = colors.accent {
-            if let Ok(color) = parse_hex_color(c) {
-                theme.accent = color;
-            } else {
-                tracing::warn!("Invalid accent color: {}", c);
-            }
-        }
-        if let Some(ref c) = colors.dimmed {
-            if let Ok(color) = parse_hex_color(c) {
-                theme.dimmed = color;
-            } else {
-                tracing::warn!("Invalid dimmed color: {}", c);
-            }
-        }
-        if let Some(ref c) = colors.dimmed_alt {
-            if let Ok(color) = parse_hex_color(c) {
-                theme.dimmed_alt = color;
-            } else {
-                tracing::warn!("Invalid dimmed_alt color: {}", c);
-            }
-        }
-        if let Some(ref c) = colors.search_highlight {
-            if let Ok(color) = parse_hex_color(c) {
-                theme.search_highlight = color;
-            } else {
-                tracing::warn!("Invalid search_highlight color: {}", c);
-            }
-        }
-        if let Some(ref c) = colors.exit_success {
-            if let Ok(color) = parse_hex_color(c) {
-                theme.exit_success = color;
-            } else {
-                tracing::warn!("Invalid exit_success color: {}", c);
-            }
-        }
-        if let Some(ref c) = colors.exit_failure {
-            if let Ok(color) = parse_hex_color(c) {
-                theme.exit_failure = color;
-            } else {
-                tracing::warn!("Invalid exit_failure color: {}", c);
-            }
-        }
+        apply_color(&colors.background, &mut theme.background, "background");
+        apply_color(&colors.foreground, &mut theme.foreground, "foreground");
+        apply_color(&colors.selection_bg, &mut theme.selection_bg, "selection_bg");
+        apply_color(&colors.selection_fg, &mut theme.selection_fg, "selection_fg");
+        apply_color(&colors.accent, &mut theme.accent, "accent");
+        apply_color(&colors.dimmed, &mut theme.dimmed, "dimmed");
+        apply_color(&colors.dimmed_alt, &mut theme.dimmed_alt, "dimmed_alt");
+        apply_color(&colors.search_highlight, &mut theme.search_highlight, "search_highlight");
+        apply_color(&colors.exit_success, &mut theme.exit_success, "exit_success");
+        apply_color(&colors.exit_failure, &mut theme.exit_failure, "exit_failure");
 
         theme
     }

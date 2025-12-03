@@ -73,6 +73,7 @@ impl GridLayout {
     }
 
     /// Convert (row, col) position to flat index
+    #[allow(dead_code)] // Public API for future use
     pub fn position_to_index(&self, row: u16, col: u16) -> usize {
         let rows = self.visible_rows as usize;
         (col as usize) * rows + (row as usize)
@@ -147,6 +148,7 @@ impl GridLayout {
     }
 
     /// Calculate entry height in lines based on display config
+    #[allow(dead_code)] // Public API for future use
     pub fn entry_height(&self, show_generic: bool, show_comment: bool, show_categories: bool) -> u16 {
         let mut height = 1; // Name line always shown
         if show_generic { height += 1; }
