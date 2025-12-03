@@ -6,6 +6,7 @@ mod history;
 mod icons;
 mod niri;
 mod pty;
+mod terminal;
 mod ui;
 
 use anyhow::Result;
