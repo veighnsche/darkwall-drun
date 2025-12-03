@@ -56,7 +56,7 @@ If an app has a `.desktop` file, DRUN can run it.
 | `Exec` | Command to run |
 | `Icon` | Stored (TUI may not display) |
 | `Categories` | Used for filtering |
-| `Terminal` | If true, runs in current terminal |
+| `Terminal` | If false, launches as GUI app; if true, runs in terminal |
 | `NoDisplay` | If true, hidden from list |
 
 ### Internal Representation
@@ -113,6 +113,11 @@ Options:
 
 | Key | Action |
 |-----|--------|
+| `y` | Copy output to clipboard (requires wl-copy) |
+| `↑` / `k` | Scroll output up |
+| `↓` / `j` | Scroll output down |
+| `g` | Scroll to top |
+| `G` | Scroll to bottom |
 | `Enter` / `Esc` | Return to launcher |
 | `q` / `Ctrl+C` | Exit |
 
@@ -145,6 +150,7 @@ bindsym $mod+d exec foot -e ssh some-host drun
 When you select an action over SSH:
 - The command runs on the **remote host**
 - Output is captured and displayed in DRUN
+- GUI apps launch detached (no terminal needed)
 - TUI apps (vim, htop) get full terminal handover
 
 ---
@@ -280,9 +286,10 @@ This is network latency. DRUN is optimized for responsiveness but can't eliminat
 │  - Fuzzy matching                           │
 ├─────────────────────────────────────────────┤
 │  Execution Layer                            │
-│  - PTY allocation                           │
+│  - PTY allocation (CLI/TUI only)            │
 │  - Output capture                           │
 │  - Process management                       │
+│  - GUI app launching (detached)             │
 ├─────────────────────────────────────────────┤
 │  Optional: Niri IPC                         │
 │  - Window floating                          │

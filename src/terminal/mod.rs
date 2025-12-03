@@ -308,8 +308,46 @@ impl EmbeddedTerminal {
     }
 
     /// Get all visible rows
+    #[allow(dead_code)] // Used in tests
     pub fn get_visible_rows(&self) -> Vec<Vec<Cell>> {
         (0..self.config.rows).map(|row| self.get_row(row)).collect()
+    }
+
+    /// Get all terminal content as text (scrollback + visible)
+    pub fn content_as_text(&self) -> String {
+        let mut lines = Vec::new();
+        
+        // Scrollback lines
+        for row in &self.scrollback {
+            let line: String = row.iter()
+                .map(|cell| cell.str())
+                .collect::<String>()
+                .trim_end()
+                .to_string();
+            lines.push(line);
+        }
+        
+        // Visible rows
+        let screen_lines = self.surface.screen_lines();
+        for line in screen_lines {
+            let text: String = (0..self.config.cols)
+                .map(|i| {
+                    line.get_cell(i)
+                        .map(|cr| cr.as_cell().str().to_string())
+                        .unwrap_or_default()
+                })
+                .collect::<String>()
+                .trim_end()
+                .to_string();
+            lines.push(text);
+        }
+        
+        // Trim trailing empty lines
+        while lines.last().map(|s| s.is_empty()).unwrap_or(false) {
+            lines.pop();
+        }
+        
+        lines.join("\n")
     }
 
     // ========== Follow Mode ==========

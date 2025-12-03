@@ -26,11 +26,12 @@ pub enum AppMode {
         #[allow(dead_code)]
         mode: TerminalMode,
     },
-    /// Command finished, showing preserved output above launcher
+    /// Command finished, showing preserved output (terminal state preserved)
     PostExecution {
         command: String,
         exit_status: CommandStatus,
-        preserved_output: Vec<String>,
+        /// When copy was attempted, for showing feedback
+        copy_feedback: Option<std::time::Instant>,
     },
     /// TUI mode - full terminal handover (htop, vim, etc.)
     TuiHandover {
@@ -350,6 +351,20 @@ impl App {
             return Ok(());
         }
 
+        // Handle GUI apps - launch detached and return to launcher
+        if terminal_mode == TerminalMode::Gui {
+            tracing::info!("Launching GUI app detached: {}", cmd);
+            std::process::Command::new("sh")
+                .arg("-c")
+                .arg(&cmd)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()?;
+            // Stay in launcher mode - GUI app runs independently
+            return Ok(());
+        }
+
         // Unfloat window if configured
         if self.config.niri.unfloat_on_execute {
             if let Some(ref niri) = self.niri {
@@ -433,22 +448,17 @@ impl App {
                 // Process exited
                 let exit_status = CommandStatus::from_exit_status(status);
                 
-                // Get preserved output from terminal
-                let preserved = self.get_terminal_lines(
-                    self.config.behavior.preserve_output_lines
-                );
-
                 // Extract command from current mode
                 let command = match &self.mode {
                     AppMode::Executing { command, .. } => command.clone(),
                     _ => String::new(),
                 };
 
-                // Transition to post-execution
+                // Transition to post-execution (terminal state is preserved)
                 self.mode = AppMode::PostExecution {
                     command,
                     exit_status,
-                    preserved_output: preserved,
+                    copy_feedback: None,
                 };
 
                 // Clean up PTY
@@ -469,41 +479,6 @@ impl App {
             }
             None => Ok(true), // Still running
         }
-    }
-
-    /// Get lines from terminal for preservation (includes scrollback)
-    fn get_terminal_lines(&self, max_lines: usize) -> Vec<String> {
-        let mut lines = Vec::new();
-        
-        // First, get scrollback lines
-        for row in self.terminal.scrollback() {
-            let line: String = row.iter()
-                .map(|cell| cell.str())
-                .collect::<String>()
-                .trim_end()
-                .to_string();
-            lines.push(line);
-        }
-        
-        // Then, get visible rows
-        let rows = self.terminal.get_visible_rows();
-        for row in rows.iter() {
-            let line: String = row.iter()
-                .map(|cell| cell.str())
-                .collect::<String>()
-                .trim_end()
-                .to_string();
-            lines.push(line);
-        }
-        
-        // Trim trailing empty lines only (preserve internal empty lines for ASCII art)
-        while lines.last().map(|s| s.is_empty()).unwrap_or(false) {
-            lines.pop();
-        }
-        
-        // Return last N lines (most recent output including errors)
-        let start = lines.len().saturating_sub(max_lines);
-        lines[start..].to_vec()
     }
 
     /// Send input to the running command
@@ -540,6 +515,34 @@ impl App {
     pub fn kill_execution(&mut self) {
         self.pty_session = None; // Drop will kill the process
         self.mode = AppMode::Launcher;
+    }
+
+    /// Copy terminal output to clipboard using wl-copy
+    pub fn copy_output_to_clipboard(&mut self) -> Result<()> {
+        use std::process::{Command, Stdio};
+        use std::io::Write;
+
+        let content = self.terminal.content_as_text();
+        
+        let mut child = Command::new("wl-copy")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| anyhow::anyhow!("Failed to spawn wl-copy: {}", e))?;
+        
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(content.as_bytes())?;
+        }
+        
+        child.wait()?;
+        
+        // Set feedback timestamp
+        if let AppMode::PostExecution { copy_feedback, .. } = &mut self.mode {
+            *copy_feedback = Some(std::time::Instant::now());
+        }
+        
+        Ok(())
     }
 
     /// Get config reference

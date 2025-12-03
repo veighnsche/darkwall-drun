@@ -255,19 +255,6 @@ async fn handle_launcher_keys(
             }
         }
         KeyCode::BackTab => app.tab_prev(),
-        // Vim-style navigation only when not filtering
-        KeyCode::Char('k') if !app.is_filtering() && !key.modifiers.contains(event::KeyModifiers::CONTROL) => {
-            app.previous();
-        }
-        KeyCode::Char('j') if !app.is_filtering() && !key.modifiers.contains(event::KeyModifiers::CONTROL) => {
-            app.next();
-        }
-        KeyCode::Char('h') if !app.is_filtering() && !key.modifiers.contains(event::KeyModifiers::CONTROL) => {
-            app.move_left();
-        }
-        KeyCode::Char('l') if !app.is_filtering() && !key.modifiers.contains(event::KeyModifiers::CONTROL) => {
-            app.move_right();
-        }
         // Backspace in filter mode
         KeyCode::Backspace => {
             if app.is_filtering() || !app.filter_text().is_empty() {
@@ -330,19 +317,49 @@ fn handle_executing_keys(app: &mut App, key: event::KeyEvent) -> Result<bool> {
 }
 
 /// Handle keys in post-execution mode
+/// Uses same scroll handling as Executing mode via terminal
 fn handle_post_execution_keys(app: &mut App, key: event::KeyEvent) -> Result<bool> {
     match key.code {
         // Enter or Esc dismisses output and returns to launcher
         KeyCode::Enter | KeyCode::Esc => {
             app.dismiss_output();
         }
-        // Ctrl+C exits
+        // Ctrl+C or q exits
         KeyCode::Char('c') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
             return Ok(true);
         }
-        // q exits (like launcher mode)
         KeyCode::Char('q') => {
             return Ok(true);
+        }
+        // Copy output to clipboard
+        KeyCode::Char('y') => {
+            if let Err(e) = app.copy_output_to_clipboard() {
+                tracing::warn!("Failed to copy to clipboard: {}", e);
+            }
+        }
+        // Scroll up (into scrollback history)
+        KeyCode::Up | KeyCode::Char('k') => {
+            app.terminal_mut().scroll_up(1);
+        }
+        // Scroll down (toward current output)
+        KeyCode::Down | KeyCode::Char('j') => {
+            app.terminal_mut().scroll_down(1);
+        }
+        // Page up/down
+        KeyCode::Char('u') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+            app.terminal_mut().scroll_up(10);
+        }
+        KeyCode::Char('d') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+            app.terminal_mut().scroll_down(10);
+        }
+        // Go to top of scrollback
+        KeyCode::Char('g') => {
+            let max_offset = app.terminal().scrollback().len();
+            app.terminal_mut().set_scroll_offset(max_offset);
+        }
+        // Go to bottom
+        KeyCode::Char('G') => {
+            app.terminal_mut().scroll_to_bottom();
         }
         _ => {}
     }

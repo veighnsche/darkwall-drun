@@ -11,13 +11,14 @@ darkwall-drun supports custom `X-Darkwall*` fields in `.desktop` files to contro
 ### X-DarkwallTerminalMode
 
 **Type:** enum  
-**Values:** `oneshot`, `interactive`, `tui`, `long-running`  
+**Values:** `gui`, `oneshot`, `interactive`, `tui`, `long-running`  
 **Default:** Inferred from command
 
 Controls how the command is executed:
 
 | Value | Behavior |
 |-------|----------|
+| `gui` | GUI application, launch detached, no terminal |
 | `oneshot` | Quick command, capture output, stay floating |
 | `interactive` | Needs input, partial capture, unfloat window |
 | `tui` | Full screen app, no capture, terminal handover |
@@ -84,6 +85,12 @@ X-DarkwallKeepOutput=false
 X-DarkwallUnfloatOnRun=true
 ```
 
+### GUI Application (Firefox, VSCode, etc.)
+
+```ini
+X-DarkwallTerminalMode=gui
+```
+
 ### Quick Lookup Command
 
 ```ini
@@ -113,7 +120,12 @@ X-DarkwallPreserveLines=50
 
 ## Automatic Detection
 
-If no `X-DarkwallTerminalMode` is specified, darkwall-drun infers the mode from the command:
+If no `X-DarkwallTerminalMode` is specified, darkwall-drun infers the mode from the command and desktop entry:
+
+### GUI Apps (detected via `Terminal=false`)
+- Any desktop entry with `Terminal=false`
+- Examples: firefox, code, gimp, libreoffice
+- **This is the deterministic way to distinguish GUI from CLI apps**
 
 ### TUI Apps (detected automatically)
 - htop, btop, top, atop
@@ -136,7 +148,8 @@ If no `X-DarkwallTerminalMode` is specified, darkwall-drun infers the mode from 
 - Commands containing `journalctl -f`
 
 ### Default
-All other commands are treated as `oneshot`.
+- Raw commands (no desktop entry) → `oneshot`
+- Desktop entries with `Terminal=true` but unmatched → `interactive`
 
 ---
 

@@ -90,9 +90,11 @@
 
 ### `executor.rs` (Phase 2)
 - Command execution
+- Terminal mode detection (GUI vs CLI/TUI)
+- GUI app launching (detached)
+- PTY-based execution for CLI/TUI apps
 - Output capture
 - Exit status handling
-- Mode detection
 
 ### `history.rs` (Phase 5)
 - Usage tracking
@@ -146,7 +148,7 @@ User Select → app.rs → niri.rs (unfloat)
                           ▼                      │
               ┌────────────────────────┐         │
               │    Post-Execution      │─────────┘
-              │  (showing output)      │
+              │  (output preserved)    │
               └────────────────────────┘
 ```
 
