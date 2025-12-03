@@ -1,8 +1,10 @@
 use anyhow::Result;
 use freedesktop_desktop_entry::{DesktopEntry, Iter};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Parsed desktop entry with fields we care about
+/// TEAM_000: Phase 4 - Added custom_fields for X-Darkwall* support
 #[derive(Debug, Clone)]
 pub struct Entry {
     pub id: String,
@@ -16,6 +18,8 @@ pub struct Entry {
     pub terminal: bool,
     pub no_display: bool,
     pub path: PathBuf,
+    /// Custom X-Darkwall* fields from the desktop entry
+    pub custom_fields: HashMap<String, String>,
 }
 
 impl Entry {
@@ -55,6 +59,22 @@ impl Entry {
         let terminal = de.terminal();
         let no_display = de.no_display();
 
+        // Extract X-Darkwall* custom fields
+        let mut custom_fields = HashMap::new();
+        // Check for known X-Darkwall fields
+        const DARKWALL_FIELDS: &[&str] = &[
+            "TerminalMode",
+            "KeepOutput",
+            "UnfloatOnRun",
+            "PreserveLines",
+        ];
+        for field in DARKWALL_FIELDS {
+            let key = format!("X-Darkwall{}", field);
+            if let Some(value) = de.desktop_entry(&key) {
+                custom_fields.insert(field.to_string(), value.to_string());
+            }
+        }
+
         Some(Self {
             id,
             name,
@@ -67,6 +87,7 @@ impl Entry {
             terminal,
             no_display,
             path: path.to_path_buf(),
+            custom_fields,
         })
     }
 
@@ -93,6 +114,27 @@ impl Entry {
                 .collect::<Vec<_>>()
                 .join(" ")
         })
+    }
+
+    /// Get a custom X-Darkwall field value
+    /// TEAM_000: Phase 4, Unit 4.4 - Custom Desktop Entry Fields
+    /// 
+    /// The field name should NOT include the "X-Darkwall" prefix.
+    /// For example, to get "X-DarkwallTerminalMode", use `get_darkwall_field("TerminalMode")`.
+    pub fn get_darkwall_field(&self, name: &str) -> Option<&str> {
+        self.custom_fields.get(name).map(|s| s.as_str())
+    }
+
+    /// Check if a custom X-Darkwall boolean field is true
+    pub fn get_darkwall_bool(&self, name: &str) -> Option<bool> {
+        self.get_darkwall_field(name).map(|v| {
+            matches!(v.to_lowercase().as_str(), "true" | "yes" | "1")
+        })
+    }
+
+    /// Get a custom X-Darkwall integer field
+    pub fn get_darkwall_int(&self, name: &str) -> Option<usize> {
+        self.get_darkwall_field(name).and_then(|v| v.parse().ok())
     }
 }
 

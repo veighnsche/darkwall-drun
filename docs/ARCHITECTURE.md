@@ -1,6 +1,15 @@
 # Architecture
 
-> darkwall-drun system architecture and module overview.
+> DRUN system architecture and module overview.
+
+---
+
+## Design Principles
+
+1. **Terminal-agnostic**: Uses only stdin/stdout/stderr. No terminal emulator assumptions.
+2. **SSH-friendly**: Works identically locally or via `ssh host drun`.
+3. **Local-only**: Actions are always local to the host where DRUN runs.
+4. **Clean separation**: TUI layer is separate from action sources.
 
 ---
 
@@ -8,7 +17,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        darkwall-drun                        │
+│                           DRUN                              │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
 │  │   main.rs   │  │   app.rs    │  │      ui.rs          │  │
@@ -16,14 +25,14 @@
 │  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘  │
 │         │                │                     │             │
 │  ┌──────▼──────┐  ┌──────▼──────┐  ┌──────────▼──────────┐  │
-│  │  config.rs  │  │ executor.rs │  │   desktop_entry.rs  │  │
-│  │  (TOML)     │  │ (PTY/spawn) │  │   (XDG parsing)     │  │
+│  │  config.rs  │  │  action.rs  │  │   desktop_entry.rs  │  │
+│  │  (TOML)     │  │ (abstract)  │  │   (XDG parsing)     │  │
 │  └─────────────┘  └──────┬──────┘  └─────────────────────┘  │
 │                          │                                   │
-│                   ┌──────▼──────┐                            │
-│                   │   niri.rs   │                            │
-│                   │   (IPC)     │                            │
-│                   └─────────────┘                            │
+│  ┌─────────────┐  ┌──────▼──────┐  ┌─────────────────────┐  │
+│  │   pty.rs    │  │ executor.rs │  │      niri.rs        │  │
+│  │  (PTY I/O)  │  │ (run cmds)  │  │  (IPC, optional)    │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -55,6 +64,12 @@
 - Configuration validation
 - Hot reload (future)
 
+### `action.rs`
+- Action abstraction (`Action` struct)
+- `ActionSource` trait for extensibility
+- Clean separation between TUI and data sources
+- Currently wraps desktop entries
+
 ### `desktop_entry.rs`
 - XDG .desktop file parsing
 - Entry filtering and sorting
@@ -62,9 +77,9 @@
 - Category handling
 
 ### `niri.rs`
-- Niri IPC client
+- Niri IPC client (optional)
 - Window state management
-- Graceful degradation
+- Graceful degradation (auto-disabled over SSH)
 - Reconnection logic
 
 ### `pty.rs` (Phase 2)

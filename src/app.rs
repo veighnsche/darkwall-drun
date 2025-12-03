@@ -6,10 +6,37 @@ use nucleo_matcher::{
 
 use crate::config::Config;
 use crate::desktop_entry::Entry;
+use crate::executor::{CommandStatus, OutputBuffer, TerminalMode};
 use crate::niri::NiriClient;
+use crate::pty::PtySession;
+
+/// Application mode - determines what UI to show and how to handle input
+/// TEAM_000: Phase 2, Unit 2.3 - State transitions
+#[derive(Debug)]
+pub enum AppMode {
+    /// Normal launcher mode - showing entry list
+    Launcher,
+    /// Executing a command with PTY - showing output
+    Executing {
+        command: String,
+        mode: TerminalMode,
+    },
+    /// Command finished, showing preserved output above launcher
+    PostExecution {
+        command: String,
+        exit_status: CommandStatus,
+        preserved_output: Vec<String>,
+    },
+    /// TUI mode - full terminal handover (htop, vim, etc.)
+    TuiHandover {
+        command: String,
+    },
+}
 
 /// Application state
 pub struct App {
+    /// Current application mode
+    mode: AppMode,
     /// All loaded desktop entries
     entries: Vec<Entry>,
     /// Filtered entries (indices into `entries`)
@@ -24,31 +51,29 @@ pub struct App {
     config: Config,
     /// Niri IPC client
     niri: Option<NiriClient>,
-    /// Last command output (for display after return)
-    last_output: Option<CommandOutput>,
+    /// PTY session for current execution (if any)
+    pty_session: Option<PtySession>,
+    /// Output buffer for current execution
+    output_buffer: OutputBuffer,
     /// Fuzzy matcher
     matcher: Matcher,
-}
-
-/// Output from an executed command
-#[derive(Debug, Clone)]
-pub struct CommandOutput {
-    pub command: String,
-    pub exit_code: Option<i32>,
-    pub stdout: String,
-    pub stderr: String,
 }
 
 impl App {
     pub fn new(entries: Vec<Entry>, config: Config, niri_enabled: bool) -> Self {
         let filtered: Vec<usize> = (0..entries.len()).collect();
+        
+        // Niri IPC: gracefully disabled if socket not found (e.g., over SSH)
         let niri = if niri_enabled {
-            NiriClient::new().ok()
+            NiriClient::try_new()
         } else {
             None
         };
 
+        let max_output_lines = config.behavior.preserve_output_lines.max(1000);
+        
         Self {
+            mode: AppMode::Launcher,
             entries,
             filtered,
             selected: 0,
@@ -56,7 +81,8 @@ impl App {
             filtering: false,
             config,
             niri,
-            last_output: None,
+            pty_session: None,
+            output_buffer: OutputBuffer::new(max_output_lines),
             matcher: Matcher::new(nucleo_matcher::Config::DEFAULT),
         }
     }
@@ -158,14 +184,55 @@ impl App {
         }
     }
 
-    /// Execute the selected entry
-    pub async fn execute_entry(&mut self, entry: Entry) -> Result<()> {
+    /// Get current application mode
+    pub fn mode(&self) -> &AppMode {
+        &self.mode
+    }
+
+    /// Check if we're in launcher mode
+    pub fn is_launcher_mode(&self) -> bool {
+        matches!(self.mode, AppMode::Launcher)
+    }
+
+    /// Check if we're executing a command
+    pub fn is_executing(&self) -> bool {
+        matches!(self.mode, AppMode::Executing { .. })
+    }
+
+    /// Check if we're in post-execution mode
+    pub fn is_post_execution(&self) -> bool {
+        matches!(self.mode, AppMode::PostExecution { .. })
+    }
+
+    /// Get output buffer reference
+    pub fn output_buffer(&self) -> &OutputBuffer {
+        &self.output_buffer
+    }
+
+    /// Get mutable output buffer reference
+    pub fn output_buffer_mut(&mut self) -> &mut OutputBuffer {
+        &mut self.output_buffer
+    }
+
+    /// Start executing the selected entry
+    /// TEAM_000: Phase 2 - In-place execution with PTY
+    pub async fn execute_entry(&mut self, entry: Entry, cols: u16, rows: u16) -> Result<()> {
         let Some(cmd) = entry.command() else {
             tracing::warn!("Entry {} has no command", entry.id);
             return Ok(());
         };
 
         tracing::info!("Executing: {}", cmd);
+
+        // Detect terminal mode
+        let terminal_mode = TerminalMode::detect(&cmd, Some(&entry));
+        tracing::debug!("Terminal mode: {:?}", terminal_mode);
+
+        // Handle TUI apps specially - they need full terminal control
+        if terminal_mode == TerminalMode::Tui {
+            self.mode = AppMode::TuiHandover { command: cmd };
+            return Ok(());
+        }
 
         // Unfloat window if configured
         if self.config.niri.unfloat_on_execute {
@@ -174,34 +241,145 @@ impl App {
             }
         }
 
-        // TODO: Phase 2 - Execute in-place with PTY
-        // For now, spawn in new terminal (Phase 1 behavior)
-        let status = tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg(&cmd)
-            .status()
-            .await?;
+        // Clear output buffer for new command
+        self.output_buffer.clear();
 
-        self.last_output = Some(CommandOutput {
+        // Spawn PTY session
+        let session = PtySession::spawn(&cmd, cols, rows)?;
+        self.pty_session = Some(session);
+
+        // Enter executing mode
+        self.mode = AppMode::Executing {
             command: cmd,
-            exit_code: status.code(),
-            stdout: String::new(),
-            stderr: String::new(),
-        });
-
-        // Re-float window if configured
-        if self.config.niri.float_on_idle {
-            if let Some(ref niri) = self.niri {
-                niri.set_floating(true).await.ok();
-            }
-        }
+            mode: terminal_mode,
+        };
 
         Ok(())
     }
 
-    /// Get last command output
-    pub fn last_output(&self) -> Option<&CommandOutput> {
-        self.last_output.as_ref()
+    /// Execute a TUI app with full terminal handover
+    /// Returns the exit code when the app exits
+    pub fn execute_tui(&mut self, cmd: &str) -> Result<Option<i32>> {
+        use crossterm::{
+            execute,
+            terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+        };
+        use std::io;
+
+        // 1. Disable our TUI
+        disable_raw_mode()?;
+        execute!(io::stdout(), LeaveAlternateScreen)?;
+
+        // 2. Run the command directly
+        let status = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .status()?;
+
+        // 3. Restore our TUI
+        enable_raw_mode()?;
+        execute!(io::stdout(), EnterAlternateScreen)?;
+
+        // Return to launcher mode
+        self.mode = AppMode::Launcher;
+
+        Ok(status.code())
+    }
+
+    /// Poll PTY for output and check if command has exited
+    /// Returns true if command is still running
+    pub fn poll_execution(&mut self) -> Result<bool> {
+        let Some(ref mut session) = self.pty_session else {
+            return Ok(false);
+        };
+
+        // Read available output
+        let mut buf = [0u8; 4096];
+        loop {
+            match session.try_read(&mut buf) {
+                Ok(Some(n)) if n > 0 => {
+                    self.output_buffer.push(&buf[..n]);
+                }
+                Ok(_) => break, // No more data or EOF
+                Err(e) => {
+                    tracing::warn!("PTY read error: {}", e);
+                    break;
+                }
+            }
+        }
+
+        // Check if process has exited
+        match session.try_wait()? {
+            Some(status) => {
+                // Process exited
+                self.output_buffer.flush();
+                
+                let exit_status = CommandStatus::from_exit_status(status);
+                let preserved = self.output_buffer.last_n_lines(
+                    self.config.behavior.preserve_output_lines
+                );
+
+                // Extract command from current mode
+                let command = match &self.mode {
+                    AppMode::Executing { command, .. } => command.clone(),
+                    _ => String::new(),
+                };
+
+                // Transition to post-execution
+                self.mode = AppMode::PostExecution {
+                    command,
+                    exit_status,
+                    preserved_output: preserved,
+                };
+
+                // Clean up PTY
+                self.pty_session = None;
+
+                // Re-float window if configured
+                if self.config.niri.float_on_idle {
+                    if let Some(ref niri) = self.niri {
+                        // Fire and forget - don't block on this
+                        let niri = niri.clone();
+                        tokio::spawn(async move {
+                            niri.set_floating(true).await.ok();
+                        });
+                    }
+                }
+
+                Ok(false)
+            }
+            None => Ok(true), // Still running
+        }
+    }
+
+    /// Send input to the running command
+    pub fn send_input(&mut self, data: &[u8]) -> Result<()> {
+        if let Some(ref mut session) = self.pty_session {
+            session.write(data)?;
+        }
+        Ok(())
+    }
+
+    /// Resize the PTY (call on terminal resize)
+    pub fn resize_pty(&mut self, cols: u16, rows: u16) -> Result<()> {
+        if let Some(ref session) = self.pty_session {
+            session.resize(cols, rows)?;
+        }
+        Ok(())
+    }
+
+    /// Dismiss post-execution output and return to launcher
+    pub fn dismiss_output(&mut self) {
+        if matches!(self.mode, AppMode::PostExecution { .. }) {
+            self.output_buffer.clear();
+            self.mode = AppMode::Launcher;
+        }
+    }
+
+    /// Kill the current execution
+    pub fn kill_execution(&mut self) {
+        self.pty_session = None; // Drop will kill the process
+        self.mode = AppMode::Launcher;
     }
 
     /// Get config reference

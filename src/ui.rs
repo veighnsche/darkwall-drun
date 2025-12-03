@@ -2,14 +2,33 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
-use crate::app::App;
+use crate::app::{App, AppMode};
+use crate::executor::CommandStatus;
 
 /// Main draw function
+/// TEAM_000: Phase 2 - Updated for execution modes
 pub fn draw(f: &mut Frame, app: &App) {
+    match app.mode() {
+        AppMode::Launcher => draw_launcher(f, app),
+        AppMode::Executing { command, .. } => draw_executing(f, app, command),
+        AppMode::PostExecution { command, exit_status, preserved_output } => {
+            draw_post_execution(f, app, command, exit_status, preserved_output)
+        }
+        AppMode::TuiHandover { .. } => {
+            // TUI handover - we shouldn't be drawing, but show a message just in case
+            let msg = Paragraph::new("Running TUI application...")
+                .style(Style::default().fg(Color::Yellow));
+            f.render_widget(msg, f.area());
+        }
+    }
+}
+
+/// Draw the launcher UI (original behavior)
+fn draw_launcher(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -155,5 +174,137 @@ fn draw_status_bar(f: &mut Frame, app: &App, area: Rect) {
 
     let status_bar = Paragraph::new(status).style(Style::default().fg(Color::DarkGray));
 
+    f.render_widget(status_bar, area);
+}
+
+/// Draw the executing UI - shows command output
+/// TEAM_000: Phase 2, Unit 2.2 - Output display
+fn draw_executing(f: &mut Frame, app: &App, command: &str) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // Command header
+            Constraint::Min(1),    // Output
+            Constraint::Length(1), // Status bar
+        ])
+        .split(f.area());
+
+    // Command header
+    let header = Paragraph::new(format!("$ {}", command))
+        .style(Style::default().fg(Color::Green))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Green))
+                .title(" Running "),
+        );
+    f.render_widget(header, chunks[0]);
+
+    // Output area
+    let output_height = chunks[1].height.saturating_sub(2) as usize; // -2 for borders
+    let buffer = app.output_buffer();
+    let lines: Vec<Line> = buffer
+        .visible_lines(output_height)
+        .map(|s| Line::from(s.to_string()))
+        .collect();
+
+    let output = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray))
+                .title(" Output "),
+        )
+        .wrap(Wrap { trim: false });
+    f.render_widget(output, chunks[1]);
+
+    // Status bar
+    let status = format!(
+        " {} lines | Ctrl+C: kill | j/k: scroll | g/G: top/bottom",
+        buffer.len()
+    );
+    let status_bar = Paragraph::new(status).style(Style::default().fg(Color::Yellow));
+    f.render_widget(status_bar, chunks[2]);
+}
+
+/// Draw the post-execution UI - shows preserved output above launcher
+/// TEAM_000: Phase 2, Unit 2.3 - Return to launcher
+fn draw_post_execution(
+    f: &mut Frame,
+    app: &App,
+    command: &str,
+    exit_status: &CommandStatus,
+    preserved_output: &[String],
+) {
+    // Calculate layout based on preserved output
+    let output_lines = preserved_output.len() as u16;
+    let output_height = output_lines.min(10) + 4; // +4 for borders and header
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(output_height), // Preserved output
+            Constraint::Length(3),             // Search bar
+            Constraint::Min(1),                // Entry list
+            Constraint::Length(1),             // Status bar
+        ])
+        .split(f.area());
+
+    // Preserved output section
+    draw_preserved_output(f, chunks[0], command, exit_status, preserved_output);
+
+    // Regular launcher below
+    draw_search_bar(f, app, chunks[1]);
+    draw_entry_list(f, app, chunks[2]);
+    draw_post_execution_status_bar(f, chunks[3]);
+}
+
+/// Draw the preserved output section
+fn draw_preserved_output(
+    f: &mut Frame,
+    area: Rect,
+    command: &str,
+    exit_status: &CommandStatus,
+    preserved_output: &[String],
+) {
+    let (exit_text, exit_color) = match exit_status {
+        CommandStatus::Exited(0) => ("Exit: 0".to_string(), Color::Green),
+        CommandStatus::Exited(code) => (format!("Exit: {}", code), Color::Red),
+        CommandStatus::Signaled(sig) => (format!("Signal: {}", sig), Color::Red),
+        CommandStatus::Running => ("Running".to_string(), Color::Yellow),
+        CommandStatus::Unknown => ("Unknown".to_string(), Color::Gray),
+    };
+
+    let mut lines: Vec<Line> = Vec::new();
+    
+    // Command line
+    lines.push(Line::from(vec![
+        Span::styled("$ ", Style::default().fg(Color::DarkGray)),
+        Span::styled(command, Style::default().fg(Color::White)),
+    ]));
+
+    // Output lines
+    for line in preserved_output {
+        lines.push(Line::from(line.as_str()));
+    }
+
+    // Exit status
+    lines.push(Line::from(vec![
+        Span::styled(format!("[{}]", exit_text), Style::default().fg(exit_color)),
+    ]));
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(exit_color))
+        .title(" Last Command ");
+
+    let paragraph = Paragraph::new(lines).block(block);
+    f.render_widget(paragraph, area);
+}
+
+/// Status bar for post-execution mode
+fn draw_post_execution_status_bar(f: &mut Frame, area: Rect) {
+    let status = " Enter: dismiss | q: quit";
+    let status_bar = Paragraph::new(status).style(Style::default().fg(Color::DarkGray));
     f.render_widget(status_bar, area);
 }

@@ -2,10 +2,14 @@
 name = "darkwall-drun"
 version = "0.1.0"
 edition = "2021"
-description = "TUI application launcher with niri integration"
+description = "TUI application launcher - reads .desktop files, works over SSH"
 authors = ["Vince"]
 license = "MIT"
 repository = "https://github.com/vince/darkwall-drun"
+
+[[bin]]
+name = "drun"
+path = "src/main.rs"
 
 [dependencies]
 # TUI
@@ -25,8 +29,15 @@ tokio = { version = "1", features = ["full"] }
 # Config
 toml = "0.8"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 dirs = "5"
 shellexpand = "3"
+
+# PTY handling (Phase 2)
+portable-pty = "0.8"
+
+# ANSI parsing (Phase 2)
+vte = "0.13"
 
 # Error handling
 anyhow = "1"

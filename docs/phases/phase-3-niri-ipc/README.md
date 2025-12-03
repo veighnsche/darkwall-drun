@@ -1,6 +1,6 @@
 # Phase 3: Niri IPC Integration
 
-> **Status:** 🔲 Not Started
+> **Status:** ✅ COMPLETE (TEAM_000)
 
 ---
 
