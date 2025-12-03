@@ -440,6 +440,7 @@ impl EmbeddedTerminal {
                 self.newline();
             }
             ControlCode::CarriageReturn => {
+                // Move cursor to beginning of line (standard CR behavior)
                 self.cursor.col = 0;
             }
             _ => {}

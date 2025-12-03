@@ -471,20 +471,39 @@ impl App {
         }
     }
 
-    /// Get lines from terminal for preservation
+    /// Get lines from terminal for preservation (includes scrollback)
     fn get_terminal_lines(&self, max_lines: usize) -> Vec<String> {
+        let mut lines = Vec::new();
+        
+        // First, get scrollback lines
+        for row in self.terminal.scrollback() {
+            let line: String = row.iter()
+                .map(|cell| cell.str())
+                .collect::<String>()
+                .trim_end()
+                .to_string();
+            lines.push(line);
+        }
+        
+        // Then, get visible rows
         let rows = self.terminal.get_visible_rows();
-        rows.iter()
-            .take(max_lines)
-            .map(|row| {
-                row.iter()
-                    .map(|cell| cell.str())
-                    .collect::<String>()
-                    .trim_end()
-                    .to_string()
-            })
-            .filter(|s| !s.is_empty())
-            .collect()
+        for row in rows.iter() {
+            let line: String = row.iter()
+                .map(|cell| cell.str())
+                .collect::<String>()
+                .trim_end()
+                .to_string();
+            lines.push(line);
+        }
+        
+        // Trim trailing empty lines only (preserve internal empty lines for ASCII art)
+        while lines.last().map(|s| s.is_empty()).unwrap_or(false) {
+            lines.pop();
+        }
+        
+        // Return last N lines (most recent output including errors)
+        let start = lines.len().saturating_sub(max_lines);
+        lines[start..].to_vec()
     }
 
     /// Send input to the running command

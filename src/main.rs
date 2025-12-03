@@ -176,8 +176,10 @@ async fn run_app<B: ratatui::backend::Backend>(
                     }
                 }
                 Event::Resize(cols, rows) => {
-                    // Propagate resize to PTY
-                    app.resize_pty(cols, rows).ok();
+                    // Propagate resize to PTY (adjusted for UI chrome)
+                    let output_cols = cols.saturating_sub(2);
+                    let output_rows = rows.saturating_sub(6);
+                    app.resize_pty(output_cols, output_rows).ok();
                 }
                 _ => {}
             }
@@ -227,7 +229,11 @@ async fn handle_launcher_keys(
         // Enter executes selected entry
         KeyCode::Enter => {
             if let Some(entry) = app.selected_entry() {
-                app.execute_entry(entry.clone(), cols, rows).await?;
+                // Adjust size for UI chrome: header(3) + output borders(2) + status(1) = 6 rows
+                // And 2 columns for left/right borders
+                let output_cols = cols.saturating_sub(2);
+                let output_rows = rows.saturating_sub(6);
+                app.execute_entry(entry.clone(), output_cols, output_rows).await?;
             }
         }
         // Navigation - arrows always work
